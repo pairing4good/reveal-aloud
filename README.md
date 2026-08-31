@@ -1,8 +1,11 @@
 # reveal-aloud
 
 [![CI](https://github.com/pairing4good/reveal-aloud/actions/workflows/ci.yml/badge.svg)](https://github.com/pairing4good/reveal-aloud/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/reveal-aloud.svg)](https://www.npmjs.com/package/reveal-aloud)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+<!-- Add this back once the package is published to npm; until then it renders as "not found":
+[![npm](https://img.shields.io/npm/v/reveal-aloud.svg)](https://www.npmjs.com/package/reveal-aloud)
+-->
 
 Reads your [reveal.js](https://revealjs.com) speaker notes out loud while you present.
 
@@ -20,7 +23,7 @@ on a Mac in Safari and Chrome.
 Two lines:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/reveal-aloud/dist/reveal-aloud.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.0/dist/reveal-aloud.js"></script>
 
 <script>
   Reveal.initialize({
@@ -29,8 +32,27 @@ Two lines:
 </script>
 ```
 
+jsDelivr serves that straight from this repository's `v0.1.0` tag, so there is nothing to
+install and nothing to sign up for.
+
+**Keep the version pinned.** jsDelivr caches a file effectively forever once it has served it,
+and an unpinned URL follows the latest release — so a deck you handed to someone months ago
+could quietly start loading different code. `@v0.1.0` is the version you tested against; say so.
+
+> *Pre-release note: the URL above goes live the moment the first version tag is pushed. Until
+> then, clone the repo and point at your local `dist/reveal-aloud.js`. Delete this note after
+> the first release.*
+
 <details>
-<summary>Prefer npm?</summary>
+<summary>From npm (once published)</summary>
+
+The package is not on npm yet. After the first `npm publish` — see
+[Releasing](#releasing) — either of these works:
+
+```html
+<!-- jsDelivr mirrors npm automatically; no separate CDN step -->
+<script src="https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.0/dist/reveal-aloud.js"></script>
+```
 
 ```bash
 npm install reveal-aloud
@@ -221,13 +243,45 @@ the CDN and the double-click demo both serve it.
 
 Two more workflows are set up but stay out of the way until you want them:
 
-- **Release** (`.github/workflows/release.yml`) publishes to npm when you push a version tag
-  (`npm version minor && git push --follow-tags`). It re-runs the whole suite first and refuses
-  to publish if the tag and `package.json` disagree. Needs an `NPM_TOKEN` secret.
+- **Release** (`.github/workflows/release.yml`) publishes to npm when you push a version tag.
+  See [Releasing](#releasing) below.
 - **Demo** (`.github/workflows/pages.yml`) publishes the demo deck to GitHub Pages. To switch it
   on: Settings → Pages → Source: *GitHub Actions*, then add a repository variable
   `DEPLOY_DEMO = true`. It is gated on that variable so it cannot turn the badge red before
   Pages has been enabled.
+
+## Releasing
+
+```bash
+npm version minor && git push --follow-tags
+```
+
+That single command is the whole release. It bumps `package.json`, commits, creates a `v*` tag
+and pushes both, which makes two things happen:
+
+**The `/gh/` CDN URL starts working immediately.** jsDelivr serves tagged GitHub releases
+directly, and `dist/` is committed, so the tag alone is enough:
+
+```
+https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v1.2.0/dist/reveal-aloud.js
+```
+
+**The tag triggers `release.yml`**, which re-runs lint, build, the dist-drift check, the unit
+suite and the end-to-end suite, refuses to continue if the tag and `package.json` version
+disagree, then runs `npm publish --provenance`. Once that succeeds the npm CDN path works too:
+
+```
+https://cdn.jsdelivr.net/npm/reveal-aloud@1.2.0/dist/reveal-aloud.js
+```
+
+Nothing is ever published *to* jsDelivr — it mirrors npm and GitHub on demand, with no account
+and no registration. Publishing to npm needs an `NPM_TOKEN` repository secret (an npm
+[automation token](https://docs.npmjs.com/creating-and-viewing-access-tokens)); the `/gh/` route
+needs no account at all.
+
+Because `dist/` is what both CDNs serve, CI fails if it has drifted from `src/`. A pinned URL is
+immutable and jsDelivr caches it forever, so a tag cut over a stale bundle is not something you
+can quietly fix later — it would keep serving the wrong code to every deck that pinned it.
 
 ## License
 
