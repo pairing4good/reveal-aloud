@@ -636,12 +636,32 @@ var CSS = `
   .reveal-aloud-indicator { transition: none; }
 }
 @media print { .reveal-aloud-indicator { display: none !important; } }
+
+.reveal-aloud-warning {
+  position: fixed;
+  right: 12px;
+  bottom: 52px;
+  z-index: 60;
+  max-width: min(460px, calc(100vw - 24px));
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(146, 64, 14, 0.94);
+  color: #fff;
+  font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.reveal-aloud-warning[data-visible="true"] { opacity: 0.95; }
+@media (prefers-reduced-motion: reduce) { .reveal-aloud-warning { transition: none; } }
+@media print { .reveal-aloud-warning { display: none !important; } }
 `;
 function createDomIndicator(options = {}) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   const doc = (_a = options.doc) != null ? _a : globalThis.document;
   const timers = (_b = options.timers) != null ? _b : globalThis;
   const hideAfterMs = (_c = options.hideAfterMs) != null ? _c : 2600;
+  const warnAfterMs = (_d = options.warnAfterMs) != null ? _d : 12e3;
   injectStyle(doc);
   const el = doc.createElement("div");
   el.className = "reveal-aloud-indicator";
@@ -649,6 +669,22 @@ function createDomIndicator(options = {}) {
   el.innerHTML = '<span class="reveal-aloud-indicator__icon"></span><span class="reveal-aloud-indicator__pulse"></span><span class="reveal-aloud-indicator__text"></span>';
   doc.body.appendChild(el);
   let hideTimer = null;
+  let warningEl = null;
+  let warningTimer = null;
+  function warn(message) {
+    if (warningEl === null) {
+      warningEl = doc.createElement("div");
+      warningEl.className = "reveal-aloud-warning";
+      warningEl.setAttribute("aria-hidden", "true");
+      doc.body.appendChild(warningEl);
+    }
+    warningEl.textContent = message;
+    warningEl.dataset.visible = "true";
+    if (warningTimer !== null) timers.clearTimeout(warningTimer);
+    warningTimer = timers.setTimeout(() => {
+      warningEl.dataset.visible = "false";
+    }, warnAfterMs);
+  }
   function show2(status, detail = {}) {
     var _a2;
     const label = (_a2 = LABELS[status]) != null ? _a2 : LABELS[Status.IDLE];
@@ -665,12 +701,15 @@ function createDomIndicator(options = {}) {
   }
   function destroy() {
     if (hideTimer !== null) timers.clearTimeout(hideTimer);
+    if (warningTimer !== null) timers.clearTimeout(warningTimer);
+    warningEl == null ? void 0 : warningEl.remove();
     el.remove();
   }
-  return { show: show2, destroy };
+  return { show: show2, warn, destroy };
 }
 function createNullIndicator() {
   return { show() {
+  }, warn() {
   }, destroy() {
   } };
 }
@@ -753,6 +792,11 @@ function createPlugin(overrides = {}) {
         break;
     }
   }
+  function applySettings(settings) {
+    config = { ...config, ...settings };
+    dispatch({ type: Event.SETTINGS_CHANGED, settings });
+    if ("voice" in settings || "lang" in settings) warnIfVoiceMissing();
+  }
   const handlers = {
     onFinished: (epoch) => dispatch({ type: Event.SPEECH_FINISHED, epoch }),
     onFailed: (epoch, error) => dispatch({ type: Event.SPEECH_FAILED, epoch, error })
@@ -770,13 +814,14 @@ function createPlugin(overrides = {}) {
   }
   function warnIfVoiceMissing() {
     var _a2;
-    if (!config.voice) return;
-    const { warning } = speech.resolveVoice(settingsFrom(config));
-    if (warning === "voice-not-found") {
-      (_a2 = scope.console) == null ? void 0 : _a2.warn(
-        `[reveal-aloud] Voice "${config.voice}" is not installed on this machine \u2014 using the default instead. Run RevealAloud.listVoices() to see what is available.`
-      );
-    }
+    if (!speech || !indicator || !config.voice) return;
+    const { voice, warning } = speech.resolveVoice(settingsFrom(config));
+    if (warning !== "voice-not-found") return;
+    const using = voice ? `using \u201C${voice.name}\u201D instead` : "no voice available";
+    indicator.warn(`Voice \u201C${config.voice}\u201D is not available \u2014 ${using}`);
+    (_a2 = scope.console) == null ? void 0 : _a2.warn(
+      `[reveal-aloud] Voice "${config.voice}" is not available to this browser \u2014 ${using}. Run RevealAloud.listVoices() for the exact names you can use. Note that macOS Siri voices are reserved by Apple and never appear in that list.`
+    );
   }
   const plugin = {
     id: "aloud",
@@ -806,7 +851,9 @@ function createPlugin(overrides = {}) {
       });
       deckAdapter.listen();
       if (config.autoStart) deckAdapter.armGesture();
-      const unsubscribe = speech.onVoicesChanged(() => {
+      let unsubscribe = () => {
+      };
+      unsubscribe = speech.onVoicesChanged(() => {
         warnIfVoiceMissing();
         unsubscribe();
       });
@@ -819,9 +866,9 @@ function createPlugin(overrides = {}) {
     replay: () => dispatch({ type: Event.REPLAY_REQUESTED }),
     isOn: () => Boolean(state && isOn(state)),
     listVoices: () => speech ? speech.listVoices().map(describeVoice) : [],
-    setVoice: (voice) => dispatch({ type: Event.SETTINGS_CHANGED, settings: { voice } }),
-    setRate: (rate) => dispatch({ type: Event.SETTINGS_CHANGED, settings: { rate } }),
-    configure: (settings) => dispatch({ type: Event.SETTINGS_CHANGED, settings }),
+    setVoice: (voice) => applySettings({ voice }),
+    setRate: (rate) => applySettings({ rate }),
+    configure: (settings) => applySettings(settings),
     getState: () => state,
     destroy: () => {
       deckAdapter == null ? void 0 : deckAdapter.destroy();

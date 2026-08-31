@@ -81,3 +81,61 @@ describe('the status badge', () => {
     expect(badge()).toBeNull();
   });
 });
+
+describe('setup warnings', () => {
+  beforeEach(() => {
+    document.head.innerHTML = '';
+    document.body.innerHTML = '';
+  });
+
+  const warning = () => document.querySelector('.reveal-aloud-warning');
+
+  it('appears on screen so a misconfigured voice is not a silent surprise', () => {
+    createDomIndicator().warn('Voice “Siri (Voice 2)” is not available — using “Samantha” instead');
+
+    expect(warning().textContent).toContain('Siri (Voice 2)');
+    expect(warning().dataset.visible).toBe('true');
+  });
+
+  it('survives the status badge changing underneath it', () => {
+    const indicator = createDomIndicator();
+
+    indicator.warn('Voice not available');
+    indicator.show(Status.OFF);
+    indicator.show(Status.SPEAKING);
+
+    // A slide change must not wipe out a configuration problem the presenter has not read yet.
+    expect(warning().dataset.visible).toBe('true');
+  });
+
+  it('fades once it has had time to be read', () => {
+    let hide;
+    const timers = { setTimeout: (fn) => ((hide = fn), 1), clearTimeout: () => {} };
+    createDomIndicator({ timers }).warn('Voice not available');
+
+    hide();
+
+    expect(warning().dataset.visible).toBe('false');
+  });
+
+  it('adds nothing to the page until there is something to warn about', () => {
+    createDomIndicator();
+
+    expect(warning()).toBeNull();
+  });
+
+  it('goes away with the rest of the plugin', () => {
+    const indicator = createDomIndicator();
+    indicator.warn('Voice not available');
+
+    indicator.destroy();
+
+    expect(warning()).toBeNull();
+  });
+
+  it('is a no-op when the presenter turned the indicator off', () => {
+    createNullIndicator().warn('Voice not available');
+
+    expect(warning()).toBeNull();
+  });
+});

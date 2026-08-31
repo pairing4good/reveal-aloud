@@ -237,7 +237,11 @@ Reveal.initialize({
         margin: 0.05,
         plugins: [RevealNotes, RevealAloud],
         aloud: {
-          // Samantha ships with every Mac. Swap in any voice from RevealAloud.listVoices().
+          // Samantha ships with every Mac. To use a different one, run
+          // RevealAloud.listVoices() in the browser console and copy a name from that list —
+          // it is the only list that counts. Note that macOS Siri voices appear in System
+          // Settings but are reserved by Apple and never reach a browser, so naming one here
+          // silently falls back to another voice.
           voice: 'Samantha',
           rate: 1.0
         }

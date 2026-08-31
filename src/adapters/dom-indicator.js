@@ -62,6 +62,25 @@ const CSS = `
   .reveal-aloud-indicator { transition: none; }
 }
 @media print { .reveal-aloud-indicator { display: none !important; } }
+
+.reveal-aloud-warning {
+  position: fixed;
+  right: 12px;
+  bottom: 52px;
+  z-index: 60;
+  max-width: min(460px, calc(100vw - 24px));
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(146, 64, 14, 0.94);
+  color: #fff;
+  font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.reveal-aloud-warning[data-visible="true"] { opacity: 0.95; }
+@media (prefers-reduced-motion: reduce) { .reveal-aloud-warning { transition: none; } }
+@media print { .reveal-aloud-warning { display: none !important; } }
 `;
 
 /**
@@ -72,6 +91,7 @@ export function createDomIndicator(options = {}) {
   const doc = options.doc ?? globalThis.document;
   const timers = options.timers ?? globalThis;
   const hideAfterMs = options.hideAfterMs ?? 2600;
+  const warnAfterMs = options.warnAfterMs ?? 12000;
 
   injectStyle(doc);
 
@@ -86,6 +106,32 @@ export function createDomIndicator(options = {}) {
   doc.body.appendChild(el);
 
   let hideTimer = null;
+  let warningEl = null;
+  let warningTimer = null;
+
+  /**
+   * Says something is wrong with the setup, separately from the status badge.
+   *
+   * The badge is overwritten every time a slide changes, so a configuration problem shown
+   * there would be gone within seconds — and the console, where this also goes, is somewhere
+   * a presenter has no reason to look.
+   */
+  function warn(message) {
+    if (warningEl === null) {
+      warningEl = doc.createElement('div');
+      warningEl.className = 'reveal-aloud-warning';
+      warningEl.setAttribute('aria-hidden', 'true');
+      doc.body.appendChild(warningEl);
+    }
+    warningEl.textContent = message;
+    warningEl.dataset.visible = 'true';
+
+    if (warningTimer !== null) timers.clearTimeout(warningTimer);
+    // Long enough to read and act on, short enough not to sit over the talk.
+    warningTimer = timers.setTimeout(() => {
+      warningEl.dataset.visible = 'false';
+    }, warnAfterMs);
+  }
 
   function show(status, detail = {}) {
     const label = LABELS[status] ?? LABELS[Status.IDLE];
@@ -106,15 +152,17 @@ export function createDomIndicator(options = {}) {
 
   function destroy() {
     if (hideTimer !== null) timers.clearTimeout(hideTimer);
+    if (warningTimer !== null) timers.clearTimeout(warningTimer);
+    warningEl?.remove();
     el.remove();
   }
 
-  return { show, destroy };
+  return { show, warn, destroy };
 }
 
 /** An indicator that does nothing, for `indicator: false`. */
 export function createNullIndicator() {
-  return { show() {}, destroy() {} };
+  return { show() {}, warn() {}, destroy() {} };
 }
 
 function injectStyle(doc) {

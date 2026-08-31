@@ -72,6 +72,18 @@ export function createPlugin(overrides = {}) {
     }
   }
 
+  /**
+   * Applies a settings change from the public API.
+   *
+   * Re-checks the voice whenever one is named: switching to an unavailable voice mid-talk is
+   * exactly as silent a failure as configuring one, and deserves the same warning.
+   */
+  function applySettings(settings) {
+    config = { ...config, ...settings };
+    dispatch({ type: Event.SETTINGS_CHANGED, settings });
+    if ('voice' in settings || 'lang' in settings) warnIfVoiceMissing();
+  }
+
   const handlers = {
     onFinished: (epoch) => dispatch({ type: Event.SPEECH_FINISHED, epoch }),
     onFailed: (epoch, error) => dispatch({ type: Event.SPEECH_FAILED, epoch, error })
@@ -89,15 +101,26 @@ export function createPlugin(overrides = {}) {
     };
   }
 
+  /**
+   * Tells the presenter when the voice they asked for is not one this browser can use.
+   *
+   * This is the single most common way to be surprised by reveal-aloud, and it is silent by
+   * nature: narration works, it just does not sound like what was configured. macOS makes it
+   * especially easy to hit — the Siri voices in System Settings are reserved by Apple and are
+   * never offered to a browser, so naming one always lands here.
+   */
   function warnIfVoiceMissing() {
-    if (!config.voice) return;
-    const { warning } = speech.resolveVoice(settingsFrom(config));
-    if (warning === 'voice-not-found') {
-      scope.console?.warn(
-        `[reveal-aloud] Voice "${config.voice}" is not installed on this machine — using the ` +
-          'default instead. Run RevealAloud.listVoices() to see what is available.'
-      );
-    }
+    if (!speech || !indicator || !config.voice) return;
+    const { voice, warning } = speech.resolveVoice(settingsFrom(config));
+    if (warning !== 'voice-not-found') return;
+
+    const using = voice ? `using “${voice.name}” instead` : 'no voice available';
+    indicator.warn(`Voice “${config.voice}” is not available — ${using}`);
+    scope.console?.warn(
+      `[reveal-aloud] Voice "${config.voice}" is not available to this browser — ${using}. ` +
+        'Run RevealAloud.listVoices() for the exact names you can use. ' +
+        'Note that macOS Siri voices are reserved by Apple and never appear in that list.'
+    );
   }
 
   const plugin = {
@@ -138,7 +161,8 @@ export function createPlugin(overrides = {}) {
       if (config.autoStart) deckAdapter.armGesture();
 
       // Voices arrive asynchronously in Chrome, so the "no such voice" check waits for them.
-      const unsubscribe = speech.onVoicesChanged(() => {
+      let unsubscribe = () => {};
+      unsubscribe = speech.onVoicesChanged(() => {
         warnIfVoiceMissing();
         unsubscribe();
       });
@@ -152,9 +176,9 @@ export function createPlugin(overrides = {}) {
     replay: () => dispatch({ type: Event.REPLAY_REQUESTED }),
     isOn: () => Boolean(state && isOn(state)),
     listVoices: () => (speech ? speech.listVoices().map(describeVoice) : []),
-    setVoice: (voice) => dispatch({ type: Event.SETTINGS_CHANGED, settings: { voice } }),
-    setRate: (rate) => dispatch({ type: Event.SETTINGS_CHANGED, settings: { rate } }),
-    configure: (settings) => dispatch({ type: Event.SETTINGS_CHANGED, settings }),
+    setVoice: (voice) => applySettings({ voice }),
+    setRate: (rate) => applySettings({ rate }),
+    configure: (settings) => applySettings(settings),
     getState: () => state,
     destroy: () => {
       deckAdapter?.destroy();

@@ -135,9 +135,33 @@ and costs nothing:
 
 **System Settings → Accessibility → Spoken Content → System Voice → Manage Voices…**
 
-Pick any English voice marked *(Enhanced)* or *(Premium)* and download it. Then put its name in
-your config. Ava, Zoe, Evan and Nathan are all good. This is the single biggest improvement you
-can make.
+Tick any English voice marked *(Enhanced)* or *(Premium)* and let it download. Ava, Zoe, Evan
+and Nathan are all good. This is the single biggest improvement you can make.
+
+Then — and this is the step that catches people — get the name from the browser, not from
+System Settings:
+
+```js
+RevealAloud.listVoices()
+```
+
+Run that in the browser console on your deck and copy a `name` from the list into your config.
+
+**Three things about that dialog that are not obvious:**
+
+- **The *System voice* dropdown has no effect here.** It sets the voice macOS uses for its own
+  spoken content. Browsers ignore it. Downloading a voice is what makes it available; selecting
+  it as the system voice does nothing for your deck.
+- **Siri voices can never be used.** They appear in that dropdown, but Apple reserves them —
+  they are not offered through `AVSpeechSynthesizer` and so
+  [never reach any browser](https://github.com/HadrienGardeur/web-speech-recommended-voices/issues/22).
+  Naming one in your config always falls back to something else.
+- **Safari shows fewer voices than Chrome.** If a voice you downloaded is missing from
+  `listVoices()` in Safari, try the same deck in Chrome before assuming the download failed.
+
+If the name in your config is not one the browser can use, reveal-aloud says so on screen when
+the deck loads and names what it fell back to, so you find out before you are on stage rather
+than during.
 
 ## Try it
 
@@ -189,8 +213,10 @@ notes are entirely inside brackets. Both are silent on purpose.
 **Half my note went missing.** You probably left a `[` unclosed — everything after it is treated
 as a stage direction. The badge warns you when that happens.
 
-**The wrong voice is used.** The name in your config isn't installed on this machine; the console
-says so and falls back to the default. Run `RevealAloud.listVoices()` to see the real names.
+**The wrong voice is used.** The name in your config is not one this browser can use, so it fell
+back — a warning says so on screen as the deck loads, and again in the console. Run
+`RevealAloud.listVoices()` for the exact names available to you. The usual cause on a Mac is
+naming a Siri voice: Apple reserves those and never exposes them to browsers. See step 5.
 
 **It reads a bit robotically.** Download an Enhanced or Premium voice — see step 5 above.
 

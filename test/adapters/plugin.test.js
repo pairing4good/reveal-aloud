@@ -104,7 +104,7 @@ describe('wiring the core to the adapters', () => {
     deck = fakeDeck();
     clock = manualClock();
     speech = recordingSpeech();
-    indicator = { show: vi.fn(), destroy: vi.fn() };
+    indicator = { show: vi.fn(), warn: vi.fn(), destroy: vi.fn() };
     plugin = createPlugin({ clock, speech, indicator, scope: window });
     plugin.init(deck);
   });
@@ -213,7 +213,7 @@ describe('the public API on Reveal.getPlugin("aloud")', () => {
     deck = fakeDeck();
     clock = manualClock();
     speech = recordingSpeech();
-    plugin = createPlugin({ clock, speech, indicator: { show() {}, destroy() {} }, scope: window });
+    plugin = createPlugin({ clock, speech, indicator: { show() {}, warn() {}, destroy() {} }, scope: window });
     plugin.init(deck);
     deck.goTo('Some notes.');
   });
@@ -262,7 +262,7 @@ describe('when the plugin should keep out of the way', () => {
     const plugin = createPlugin({
       speech,
       clock: manualClock(),
-      indicator: { show() {}, destroy() {} },
+      indicator: { show() {}, warn() {}, destroy() {} },
       scope: { ...window, location: { search: '?print-pdf' } }
     });
 
@@ -297,7 +297,7 @@ describe('configuration', () => {
     const plugin = createPlugin({
       speech,
       clock,
-      indicator: { show() {}, destroy() {} },
+      indicator: { show() {}, warn() {}, destroy() {} },
       scope: window
     });
 
@@ -308,5 +308,120 @@ describe('configuration', () => {
 
     expect(deck.binding.binding.key).toBe('T');
     expect(speech.live.request.settings.rate).toBe(1.25);
+  });
+});
+
+describe('when the configured voice is not one the browser can use', () => {
+  /**
+   * The case that prompted this: a presenter picks a Siri voice in macOS System Settings and
+   * names it in their config. Apple reserves those voices and never offers them to a browser,
+   * so narration quietly runs in some other voice. Failing silently here is the worst outcome —
+   * everything works, it just sounds wrong, and there is nothing on screen to explain why.
+   */
+  function pluginWith(voiceName, installed) {
+    document.body.innerHTML = '';
+    const deck = fakeDeck({ voice: voiceName });
+    const indicator = { show: vi.fn(), warn: vi.fn(), destroy: vi.fn() };
+    const speech = {
+      ...recordingSpeech(),
+      listVoices: () => installed,
+      resolveVoice: () => ({
+        voice: installed[0] ?? null,
+        warning: installed.some((v) => v.name === voiceName) ? null : 'voice-not-found'
+      })
+    };
+    const warnings = [];
+    // Spy on the real window's console rather than passing a stand-in object: spreading
+    // `window` drops its prototype methods, and the adapter needs addEventListener.
+    const spy = vi.spyOn(console, 'warn').mockImplementation((m) => warnings.push(m));
+    const plugin = createPlugin({ speech, indicator, clock: manualClock(), scope: window });
+    plugin.init(deck);
+    spy.mockRestore();
+    return { indicator, warnings };
+  }
+
+  const installed = [{ name: 'Samantha', lang: 'en-US' }];
+
+  it('says so on screen, not only in a console nobody has open', () => {
+    const { indicator } = pluginWith('Siri (Voice 2)', installed);
+
+    expect(indicator.warn).toHaveBeenCalledOnce();
+    expect(indicator.warn.mock.calls[0][0]).toContain('Siri (Voice 2)');
+  });
+
+  it('names the voice it fell back to, so the presenter knows what they will hear', () => {
+    const { indicator } = pluginWith('Siri (Voice 2)', installed);
+
+    expect(indicator.warn.mock.calls[0][0]).toContain('Samantha');
+  });
+
+  it('points at listVoices() and explains the Siri restriction in the console', () => {
+    const { warnings } = pluginWith('Siri (Voice 2)', installed);
+
+    expect(warnings.join(' ')).toMatch(/listVoices/);
+    expect(warnings.join(' ')).toMatch(/Siri/i);
+  });
+
+  it('stays quiet when the configured voice is available', () => {
+    const { indicator, warnings } = pluginWith('Samantha', installed);
+
+    expect(indicator.warn).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
+  });
+
+  it('stays quiet when no voice was configured at all', () => {
+    const { indicator } = pluginWith('', installed);
+
+    expect(indicator.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('changing the voice while presenting', () => {
+  it('warns again when the new voice is not one the browser can use', () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck();
+    const indicator = { show: vi.fn(), warn: vi.fn(), destroy: vi.fn() };
+    const plugin = createPlugin({
+      indicator,
+      clock: manualClock(),
+      scope: window,
+      speech: {
+        ...recordingSpeech(),
+        listVoices: () => [{ name: 'Samantha', lang: 'en-US' }],
+        resolveVoice: (settings) => ({
+          voice: { name: 'Samantha' },
+          warning: settings.voice === 'Samantha' ? null : 'voice-not-found'
+        })
+      }
+    });
+    plugin.init(deck);
+    expect(indicator.warn).not.toHaveBeenCalled();
+
+    plugin.setVoice('Siri (Voice 2)');
+
+    expect(indicator.warn).toHaveBeenCalledOnce();
+    expect(indicator.warn.mock.calls[0][0]).toContain('Siri (Voice 2)');
+  });
+
+  it('does not warn when only the speed changes', () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck({ voice: 'Nonexistent' });
+    const indicator = { show: vi.fn(), warn: vi.fn(), destroy: vi.fn() };
+    const plugin = createPlugin({
+      indicator,
+      clock: manualClock(),
+      scope: window,
+      speech: {
+        ...recordingSpeech(),
+        listVoices: () => [{ name: 'Samantha', lang: 'en-US' }],
+        resolveVoice: () => ({ voice: { name: 'Samantha' }, warning: 'voice-not-found' })
+      }
+    });
+    plugin.init(deck);
+    indicator.warn.mockClear();
+
+    plugin.setRate(1.5);
+
+    expect(indicator.warn).not.toHaveBeenCalled();
   });
 });
