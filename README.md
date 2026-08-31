@@ -16,6 +16,9 @@ for you, not the audience — it never gets spoken.
 Free voices, no account, no API key, nothing to install on your machine. Works out of the box
 on a Mac in Safari and Chrome.
 
+Three different engines can do the actual speaking — see **[ENGINES.md](ENGINES.md)** for a
+side-by-side comparison, how to switch, and what setup each one needs.
+
 ---
 
 ## 1. Add it to your deck

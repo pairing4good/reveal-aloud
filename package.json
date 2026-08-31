@@ -16,6 +16,7 @@
     "src",
     "bin",
     "README.md",
+    "ENGINES.md",
     "LICENSE"
   ],
   "scripts": {
