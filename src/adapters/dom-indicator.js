@@ -81,6 +81,24 @@ const CSS = `
 .reveal-aloud-warning[data-visible="true"] { opacity: 0.95; }
 @media (prefers-reduced-motion: reduce) { .reveal-aloud-warning { transition: none; } }
 @media print { .reveal-aloud-warning { display: none !important; } }
+
+.reveal-aloud-progress {
+  position: fixed;
+  right: 12px;
+  bottom: 52px;
+  z-index: 60;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(30, 58, 138, 0.94);
+  color: #fff;
+  font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.reveal-aloud-progress[data-visible="true"] { opacity: 0.95; }
+@media (prefers-reduced-motion: reduce) { .reveal-aloud-progress { transition: none; } }
+@media print { .reveal-aloud-progress { display: none !important; } }
 `;
 
 /**
@@ -108,6 +126,7 @@ export function createDomIndicator(options = {}) {
   let hideTimer = null;
   let warningEl = null;
   let warningTimer = null;
+  let progressEl = null;
 
   /**
    * Says something is wrong with the setup, separately from the status badge.
@@ -133,6 +152,25 @@ export function createDomIndicator(options = {}) {
     }, warnAfterMs);
   }
 
+  /**
+   * Reports a one-off, non-error background task — currently only a Kokoro model download.
+   * Separate from `warn`: a download in progress is not a problem, and separate from `show`:
+   * it must survive slide changes that would otherwise overwrite it.
+   *
+   * @param {string} text
+   * @param {boolean} [done] pass true on the final call to fade it out
+   */
+  function progress(text, done = false) {
+    if (progressEl === null) {
+      progressEl = doc.createElement('div');
+      progressEl.className = 'reveal-aloud-progress';
+      progressEl.setAttribute('aria-hidden', 'true');
+      doc.body.appendChild(progressEl);
+    }
+    progressEl.textContent = text;
+    progressEl.dataset.visible = done ? 'false' : 'true';
+  }
+
   function show(status, detail = {}) {
     const label = LABELS[status] ?? LABELS[Status.IDLE];
     const suffix = detail.unclosedBracket ? ' · unclosed “[” in notes' : '';
@@ -154,15 +192,16 @@ export function createDomIndicator(options = {}) {
     if (hideTimer !== null) timers.clearTimeout(hideTimer);
     if (warningTimer !== null) timers.clearTimeout(warningTimer);
     warningEl?.remove();
+    progressEl?.remove();
     el.remove();
   }
 
-  return { show, warn, destroy };
+  return { show, warn, progress, destroy };
 }
 
 /** An indicator that does nothing, for `indicator: false`. */
 export function createNullIndicator() {
-  return { show() {}, warn() {}, destroy() {} };
+  return { show() {}, warn() {}, progress() {}, destroy() {} };
 }
 
 function injectStyle(doc) {

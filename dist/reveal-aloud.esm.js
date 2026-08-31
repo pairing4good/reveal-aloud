@@ -429,6 +429,180 @@ function isExpectedInterruption(event) {
   return (event == null ? void 0 : event.error) === "interrupted" || (event == null ? void 0 : event.error) === "canceled";
 }
 
+// src/adapters/kokoro-speech.js
+var DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
+var DEFAULT_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+var KNOWN_VOICES = [
+  ["af_heart", "en-US"],
+  ["af_bella", "en-US"],
+  ["af_nicole", "en-US"],
+  ["af_aoede", "en-US"],
+  ["af_kore", "en-US"],
+  ["af_sarah", "en-US"],
+  ["af_nova", "en-US"],
+  ["af_sky", "en-US"],
+  ["af_alloy", "en-US"],
+  ["af_jessica", "en-US"],
+  ["af_river", "en-US"],
+  ["am_adam", "en-US"],
+  ["am_echo", "en-US"],
+  ["am_eric", "en-US"],
+  ["am_fenrir", "en-US"],
+  ["am_liam", "en-US"],
+  ["am_michael", "en-US"],
+  ["am_onyx", "en-US"],
+  ["am_puck", "en-US"],
+  ["bf_alice", "en-GB"],
+  ["bf_emma", "en-GB"],
+  ["bf_isabella", "en-GB"],
+  ["bf_lily", "en-GB"],
+  ["bm_daniel", "en-GB"],
+  ["bm_fable", "en-GB"],
+  ["bm_george", "en-GB"],
+  ["bm_lewis", "en-GB"]
+].map(([name, lang]) => ({ name, lang, default: name === "af_heart" }));
+function createKokoroSpeech(options = {}) {
+  const {
+    moduleUrl = DEFAULT_MODULE_URL,
+    modelId = DEFAULT_MODEL_ID,
+    dtype = "q8",
+    device = "wasm",
+    onProgress = () => {
+    },
+    importModule = (url) => import(
+      /* webpackIgnore: true */
+      url
+    ),
+    audioFactory = () => new Audio()
+  } = options;
+  let modelPromise = null;
+  let liveVoices = null;
+  let liveEpoch = null;
+  let activePlayback = null;
+  function loadModel() {
+    if (modelPromise) return modelPromise;
+    modelPromise = importModule(moduleUrl).then(
+      ({ KokoroTTS }) => KokoroTTS.from_pretrained(modelId, {
+        dtype,
+        device,
+        progress_callback: (update) => {
+          if (update && typeof update.loaded === "number" && update.total) {
+            onProgress({ loaded: update.loaded, total: update.total });
+          }
+        }
+      })
+    ).then((tts) => {
+      if (typeof tts.list_voices === "function") {
+        const names = tts.list_voices();
+        if (Array.isArray(names) && names.length > 0) {
+          liveVoices = names.map((name) => voiceMetaFor(name));
+        }
+      }
+      return tts;
+    });
+    return modelPromise;
+  }
+  async function speak(request, handlers) {
+    const { chunks, epoch, settings = {} } = request;
+    liveEpoch = epoch;
+    let tts;
+    try {
+      tts = await loadModel();
+    } catch (error) {
+      if (liveEpoch !== epoch) return;
+      liveEpoch = null;
+      handlers.onFailed(epoch, describeError(error, "kokoro-load-failed"));
+      return;
+    }
+    if (liveEpoch !== epoch) return;
+    const { voice } = resolveVoice(settings);
+    const voiceId = voice ? voice.name : void 0;
+    try {
+      let pending = generate(tts, chunks[0], voiceId);
+      for (let i = 0; i < chunks.length; i++) {
+        const blob = await pending;
+        if (liveEpoch !== epoch) return;
+        pending = i + 1 < chunks.length ? generate(tts, chunks[i + 1], voiceId) : null;
+        await play(blob, epoch, settings);
+        if (liveEpoch !== epoch) return;
+      }
+    } catch (error) {
+      if (liveEpoch !== epoch) return;
+      liveEpoch = null;
+      handlers.onFailed(epoch, describeError(error, "kokoro-speech-failed"));
+      return;
+    }
+    if (liveEpoch === epoch) {
+      liveEpoch = null;
+      handlers.onFinished(epoch);
+    }
+  }
+  async function generate(tts, text, voiceId) {
+    const audio = await tts.generate(text, voiceId ? { voice: voiceId } : void 0);
+    return audio.toBlob();
+  }
+  function play(blob, epoch, settings) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const el = audioFactory();
+      el.src = url;
+      if (typeof settings.rate === "number") el.playbackRate = settings.rate;
+      if (typeof settings.volume === "number") el.volume = settings.volume;
+      const finish = (fn, value) => {
+        if ((activePlayback == null ? void 0 : activePlayback.el) === el) activePlayback = null;
+        URL.revokeObjectURL(url);
+        el.onended = null;
+        el.onerror = null;
+        fn(value);
+      };
+      el.onended = () => finish(resolve);
+      el.onerror = () => finish(reject, new Error("kokoro-audio-playback-failed"));
+      activePlayback = { el, settle: () => finish(resolve) };
+      const played = el.play();
+      if (played == null ? void 0 : played.catch) played.catch((error) => finish(reject, error));
+      if (liveEpoch !== epoch) activePlayback == null ? void 0 : activePlayback.settle();
+    });
+  }
+  function stop() {
+    liveEpoch = null;
+    if (activePlayback) {
+      activePlayback.el.pause();
+      activePlayback.settle();
+    }
+  }
+  function listVoices2() {
+    return liveVoices != null ? liveVoices : KNOWN_VOICES;
+  }
+  function resolveVoice(settings = {}) {
+    return pickVoice(listVoices2(), { name: settings.voice, lang: settings.lang });
+  }
+  function onVoicesChanged(_listener) {
+    return () => {
+    };
+  }
+  return {
+    speak,
+    stop,
+    listVoices: listVoices2,
+    resolveVoice,
+    onVoicesChanged,
+    /** Starts the model download ahead of the first `speak()`, e.g. from a "load now" button. */
+    preload: loadModel
+  };
+}
+function voiceMetaFor(name) {
+  const known = KNOWN_VOICES.find((v) => v.name === name);
+  if (known) return known;
+  const lang = { a: "en-US", b: "en-GB", j: "ja-JP", z: "zh-CN", e: "es-ES", f: "fr-FR", h: "hi-IN", i: "it-IT", p: "pt-BR" }[name[0]];
+  return { name, lang };
+}
+function describeError(error, fallback2) {
+  return error instanceof Error ? error.message : fallback2;
+}
+function isKokoroSupported(scope = globalThis) {
+  return typeof scope.WebAssembly === "object" && typeof scope.Audio === "function";
+}
+
 // src/adapters/reveal-deck.js
 var TEXT_NODE = 3;
 var ELEMENT_NODE = 1;
@@ -655,6 +829,24 @@ var CSS = `
 .reveal-aloud-warning[data-visible="true"] { opacity: 0.95; }
 @media (prefers-reduced-motion: reduce) { .reveal-aloud-warning { transition: none; } }
 @media print { .reveal-aloud-warning { display: none !important; } }
+
+.reveal-aloud-progress {
+  position: fixed;
+  right: 12px;
+  bottom: 52px;
+  z-index: 60;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(30, 58, 138, 0.94);
+  color: #fff;
+  font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.reveal-aloud-progress[data-visible="true"] { opacity: 0.95; }
+@media (prefers-reduced-motion: reduce) { .reveal-aloud-progress { transition: none; } }
+@media print { .reveal-aloud-progress { display: none !important; } }
 `;
 function createDomIndicator(options = {}) {
   var _a, _b, _c, _d;
@@ -671,6 +863,7 @@ function createDomIndicator(options = {}) {
   let hideTimer = null;
   let warningEl = null;
   let warningTimer = null;
+  let progressEl = null;
   function warn(message) {
     if (warningEl === null) {
       warningEl = doc.createElement("div");
@@ -684,6 +877,16 @@ function createDomIndicator(options = {}) {
     warningTimer = timers.setTimeout(() => {
       warningEl.dataset.visible = "false";
     }, warnAfterMs);
+  }
+  function progress(text, done = false) {
+    if (progressEl === null) {
+      progressEl = doc.createElement("div");
+      progressEl.className = "reveal-aloud-progress";
+      progressEl.setAttribute("aria-hidden", "true");
+      doc.body.appendChild(progressEl);
+    }
+    progressEl.textContent = text;
+    progressEl.dataset.visible = done ? "false" : "true";
   }
   function show2(status, detail = {}) {
     var _a2;
@@ -703,13 +906,15 @@ function createDomIndicator(options = {}) {
     if (hideTimer !== null) timers.clearTimeout(hideTimer);
     if (warningTimer !== null) timers.clearTimeout(warningTimer);
     warningEl == null ? void 0 : warningEl.remove();
+    progressEl == null ? void 0 : progressEl.remove();
     el.remove();
   }
-  return { show: show2, warn, destroy };
+  return { show: show2, warn, progress, destroy };
 }
 function createNullIndicator() {
   return { show() {
   }, warn() {
+  }, progress() {
   }, destroy() {
   } };
 }
@@ -742,13 +947,30 @@ function createBrowserClock(timers = globalThis) {
 
 // src/app/plugin.js
 var DEFAULTS = Object.freeze({
-  /** Voice name as the operating system reports it. Substring matches are fine. */
+  /**
+   * Which engine speaks the notes.
+   *   'webspeech' — the operating system's built-in voices. Free, instant, no download.
+   *   'kokoro'    — an open-weights model that runs in the browser, sounds far less robotic,
+   *                 and is also free — at the cost of a one-time model download (tens of MB)
+   *                 and a short per-sentence generation delay. See demo/voices.html to compare.
+   */
+  engine: "webspeech",
+  /** Voice name. For 'webspeech' this is whatever the OS reports; for 'kokoro' it is an id
+   *  like 'af_bella' — run RevealAloud.listVoices() after switching engines to see the list. */
   voice: "",
   lang: "",
-  /** Web Speech scale: 1 is normal, 0.5 half speed, 2 double. */
+  /** Speaking speed: 1 is normal, 0.5 half speed, 2 double. */
   rate: 1,
   pitch: 1,
   volume: 1,
+  /** kokoro only: where to load the `kokoro-js` library from. */
+  kokoroModuleUrl: "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm",
+  /** kokoro only: which model to fetch. */
+  kokoroModel: "onnx-community/Kokoro-82M-v1.0-ONNX",
+  /** kokoro only: smaller downloads faster with no noticeable quality loss at 'q8'. */
+  kokoroDtype: "q8",
+  /** kokoro only: 'webgpu' is faster where supported; 'wasm' works everywhere. */
+  kokoroDevice: "wasm",
   /** Start narrating as soon as the deck loads (after the first keypress or click). */
   autoStart: false,
   /** The shortcut that turns narration on and off. */
@@ -812,6 +1034,32 @@ function createPlugin(overrides = {}) {
       maxChars: cfg.maxChars
     };
   }
+  function createSpeech() {
+    var _a2, _b;
+    if (config.engine === "kokoro") {
+      if (!isKokoroSupported(scope)) {
+        (_a2 = scope.console) == null ? void 0 : _a2.warn(
+          "[reveal-aloud] This browser cannot run Kokoro (no WebAssembly); narration is off."
+        );
+        return null;
+      }
+      return createKokoroSpeech({
+        moduleUrl: config.kokoroModuleUrl,
+        modelId: config.kokoroModel,
+        dtype: config.kokoroDtype,
+        device: config.kokoroDevice,
+        onProgress: ({ loaded, total }) => {
+          const pct = Math.round(loaded / total * 100);
+          indicator == null ? void 0 : indicator.progress(`Downloading voice model\u2026 ${pct}%`, pct >= 100);
+        }
+      });
+    }
+    if (!isSpeechSupported(scope)) {
+      (_b = scope.console) == null ? void 0 : _b.warn("[reveal-aloud] This browser has no speech synthesis; narration is off.");
+      return null;
+    }
+    return createWebSpeech();
+  }
   function warnIfVoiceMissing() {
     var _a2;
     if (!speech || !indicator || !config.voice) return;
@@ -826,17 +1074,14 @@ function createPlugin(overrides = {}) {
   const plugin = {
     id: "aloud",
     init(deck) {
-      var _a2, _b, _c, _d, _e, _f, _g;
+      var _a2, _b, _c, _d, _e, _f;
       config = { ...DEFAULTS, ...(_b = (_a2 = deck.getConfig) == null ? void 0 : _a2.call(deck).aloud) != null ? _b : {}, ...(_c = overrides.config) != null ? _c : {} };
-      speech = (_d = overrides.speech) != null ? _d : isSpeechSupported(scope) ? createWebSpeech() : null;
+      speech = (_d = overrides.speech) != null ? _d : createSpeech();
       if (!speech || isPrintView(deck, scope)) {
-        if (!speech) {
-          (_e = scope.console) == null ? void 0 : _e.warn("[reveal-aloud] This browser has no speech synthesis; narration is off.");
-        }
         return;
       }
-      clock = (_f = overrides.clock) != null ? _f : createBrowserClock(scope);
-      indicator = (_g = overrides.indicator) != null ? _g : config.indicator ? createDomIndicator({ doc: scope.document }) : createNullIndicator();
+      clock = (_e = overrides.clock) != null ? _e : createBrowserClock(scope);
+      indicator = (_f = overrides.indicator) != null ? _f : config.indicator ? createDomIndicator({ doc: scope.document }) : createNullIndicator();
       state = initialState({
         autoStart: config.autoStart,
         requiresGesture: true,

@@ -425,3 +425,70 @@ describe('changing the voice while presenting', () => {
     expect(indicator.warn).not.toHaveBeenCalled();
   });
 });
+
+describe('choosing the speech engine', () => {
+  it('defaults to Web Speech', () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck();
+    // Spreading `window` drops its prototype methods (addEventListener among them), which the
+    // deck adapter needs — so stub speechSynthesis on the real window instead.
+    const define = (name, value) =>
+      Object.defineProperty(window, name, { value, configurable: true, writable: true });
+    define('speechSynthesis', { getVoices: () => [], addEventListener() {}, removeEventListener() {} });
+    define('SpeechSynthesisUtterance', function () {});
+
+    const plugin = createPlugin({
+      indicator: { show() {}, warn() {}, progress() {}, destroy() {} },
+      clock: manualClock(),
+      scope: window
+    });
+
+    plugin.init(deck);
+
+    // Reaching init() without throwing, with the browser's speech globals present and no
+    // `engine` configured, proves the Web Speech path was taken — createKokoroSpeech never
+    // touches speechSynthesis at all.
+    expect(deck.binding).not.toBeNull();
+  });
+
+  it('does nothing when Kokoro is requested on a browser with no WebAssembly', () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck({ engine: 'kokoro' });
+    const warnings = [];
+    const plugin = createPlugin({
+      scope: { ...window, WebAssembly: undefined, console: { warn: (m) => warnings.push(m) } }
+    });
+
+    plugin.init(deck);
+
+    expect(deck.binding).toBeNull();
+    expect(warnings.join(' ')).toMatch(/Kokoro/);
+  });
+
+  it('reports Kokoro download progress through the indicator', async () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck({ engine: 'kokoro' });
+    const indicator = { show: vi.fn(), warn: vi.fn(), progress: vi.fn(), destroy: vi.fn() };
+    let capturedOnProgress;
+    const kokoroModule = await import('../../src/adapters/kokoro-speech.js');
+    const spy = vi
+      .spyOn(kokoroModule, 'createKokoroSpeech')
+      .mockImplementation((options) => {
+        capturedOnProgress = options.onProgress;
+        return {
+          speak() {},
+          stop() {},
+          listVoices: () => [],
+          resolveVoice: () => ({ voice: null, warning: null }),
+          onVoicesChanged: () => () => {}
+        };
+      });
+
+    const plugin = createPlugin({ indicator, clock: manualClock(), scope: window });
+    plugin.init(deck);
+    capturedOnProgress({ loaded: 50, total: 100 });
+
+    expect(indicator.progress).toHaveBeenCalledWith('Downloading voice model… 50%', false);
+    spy.mockRestore();
+  });
+});

@@ -73,7 +73,7 @@
         font-weight: 600;
       }
       .tag--default { background: #e8e8ee; color: #55555f; }
-      #config {
+      #kokoroConfig, #config {
         margin-top: 1.5rem;
         padding: 0.9rem 1rem;
         border-radius: 8px;
@@ -84,6 +84,7 @@
         white-space: pre;
         overflow-x: auto;
       }
+      #kokoroList table { margin-top: 0.6rem; }
       .empty { padding: 2rem; text-align: center; color: #85858f; }
       @media (prefers-color-scheme: dark) {
         body { color: #e8e8ec; background: #17171a; }
@@ -118,6 +119,33 @@
     <div id="summary"></div>
     <div id="list"><p class="empty">Loading voices…</p></div>
     <div id="config" hidden></div>
+
+    <hr style="margin:2.2rem 0; border:none; border-top:1px solid #e3e3e8;" />
+
+    <h2 style="font-size:1.15rem; margin:0 0 0.3rem;">Not good enough? Try Kokoro.</h2>
+    <p class="sub">
+      An open, free text-to-speech model that runs entirely in this browser tab — no account,
+      no server, no per-use cost. It sounds far less robotic than the system voices above. The
+      cost is a one-time download (tens of MB) and a short pause before each sentence while it
+      generates the audio.
+    </p>
+
+    <div class="panel">
+      <div id="kokoroIdle">
+        <button id="kokoroLoad">Load Kokoro (~90 MB, one-time)</button>
+      </div>
+      <div id="kokoroLoading" hidden>
+        <label>Downloading the voice model…</label>
+        <div style="height:8px; border-radius:4px; background:#e3e3e8; overflow:hidden; margin-top:0.4rem;">
+          <div id="kokoroBar" style="height:100%; width:0%; background:#2563eb; transition:width 150ms;"></div>
+        </div>
+        <p id="kokoroLoadingText" class="sub" style="margin:0.4rem 0 0;"></p>
+      </div>
+      <p id="kokoroError" class="sub" hidden style="color:#b91c1c;"></p>
+    </div>
+
+    <div id="kokoroList"></div>
+    <div id="kokoroConfig" hidden></div>
 
     <script>
       /*
@@ -261,6 +289,149 @@
       // Chrome reports an empty list on the first call and fills it in asynchronously.
       speechSynthesis.addEventListener('voiceschanged', render);
       render();
+
+      // -----------------------------------------------------------------------------------
+      // Kokoro: talks to the real `kokoro-js` library directly, the same way this page talks
+      // to speechSynthesis directly above — so what you see here is genuinely what the
+      // library does, not reveal-aloud's abstraction over it.
+      // -----------------------------------------------------------------------------------
+
+      const KOKORO_MODULE_URL = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm';
+      const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+
+      /** English voices, so something plays even before the full list has loaded. */
+      const KOKORO_VOICE_HINTS = {
+        af_heart: 'warm, American — the model’s own default',
+        af_bella: 'elegant, American',
+        af_nicole: 'calm, American',
+        am_adam: 'youthful, American',
+        am_michael: 'steady, American',
+        bf_emma: 'British',
+        bm_george: 'British'
+      };
+
+      const kokoroIdle = document.getElementById('kokoroIdle');
+      const kokoroLoading = document.getElementById('kokoroLoading');
+      const kokoroBar = document.getElementById('kokoroBar');
+      const kokoroLoadingText = document.getElementById('kokoroLoadingText');
+      const kokoroError = document.getElementById('kokoroError');
+      const kokoroListEl = document.getElementById('kokoroList');
+      const kokoroConfigEl = document.getElementById('kokoroConfig');
+
+      document.getElementById('kokoroLoad').addEventListener('click', loadKokoro);
+
+      let kokoroTts = null;
+      let kokoroSpeakingButton = null;
+      let kokoroAudio = null;
+
+      async function loadKokoro() {
+        kokoroIdle.hidden = true;
+        kokoroLoading.hidden = false;
+        kokoroError.hidden = true;
+
+        try {
+          const { KokoroTTS } = await import(/* @vite-ignore */ KOKORO_MODULE_URL);
+          kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+            dtype: 'q8',
+            device: 'wasm',
+            progress_callback: (update) => {
+              if (typeof update?.loaded !== 'number' || !update.total) return;
+              const pct = Math.round((update.loaded / update.total) * 100);
+              kokoroBar.style.width = pct + '%';
+              kokoroLoadingText.textContent = pct + '%';
+            }
+          });
+        } catch (error) {
+          kokoroLoading.hidden = true;
+          kokoroError.hidden = false;
+          kokoroError.textContent =
+            'Could not load Kokoro: ' +
+            (error?.message || error) +
+            '. This needs an internet connection to cdn.jsdelivr.net the first time.';
+          kokoroIdle.hidden = false;
+          return;
+        }
+
+        kokoroLoading.hidden = true;
+        renderKokoroVoices();
+      }
+
+      function renderKokoroVoices() {
+        const names =
+          typeof kokoroTts.list_voices === 'function'
+            ? kokoroTts.list_voices()
+            : Object.keys(KOKORO_VOICE_HINTS);
+
+        const table = document.createElement('table');
+        for (const name of names) table.appendChild(kokoroRowFor(name));
+        kokoroListEl.innerHTML = '';
+        kokoroListEl.appendChild(table);
+      }
+
+      function kokoroRowFor(name) {
+        const row = document.createElement('tr');
+        const hint = KOKORO_VOICE_HINTS[name];
+        if (hint) row.className = 'notable';
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'name';
+        nameCell.textContent = name;
+        if (hint) nameCell.appendChild(tag(hint));
+
+        const langCell = document.createElement('td');
+        langCell.className = 'lang';
+        langCell.textContent = name.startsWith('b') ? 'en-GB' : name.startsWith('a') ? 'en-US' : '';
+
+        const actions = document.createElement('td');
+        actions.className = 'actions';
+        const speakButton = document.createElement('button');
+        speakButton.textContent = 'Speak';
+        speakButton.addEventListener('click', () => speakKokoro(name, speakButton));
+        const useButton = document.createElement('button');
+        useButton.textContent = 'Use this';
+        useButton.style.marginLeft = '0.4rem';
+        useButton.addEventListener('click', () => showKokoroConfig(name));
+        actions.append(speakButton, useButton);
+
+        row.append(nameCell, langCell, actions);
+        return row;
+      }
+
+      async function speakKokoro(voice, button) {
+        kokoroAudio?.pause();
+        kokoroSpeakingButton?.classList.remove('speaking');
+        button.classList.add('speaking');
+        kokoroSpeakingButton = button;
+
+        const text = sampleEl.value.trim() || 'Hello.';
+        const audio = await kokoroTts.generate(text, { voice });
+        const blob = audio.toBlob();
+        const url = URL.createObjectURL(blob);
+        kokoroAudio = new Audio(url);
+        kokoroAudio.playbackRate = Number(rateEl.value);
+        kokoroAudio.onended = () => {
+          URL.revokeObjectURL(url);
+          button.classList.remove('speaking');
+        };
+        kokoroAudio.play();
+      }
+
+      function showKokoroConfig(voice) {
+        kokoroConfigEl.hidden = false;
+        kokoroConfigEl.textContent =
+          'Reveal.initialize({\n' +
+          '  plugins: [ RevealAloud ],\n' +
+          '  aloud: {\n' +
+          "    engine: 'kokoro',\n" +
+          `    voice: ${JSON.stringify(voice)},\n` +
+          `    rate: ${Number(rateEl.value).toFixed(2)}\n` +
+          '  }\n' +
+          '});\n\n' +
+          '// First load is a one-time ~90MB download, cached by the browser after that.\n' +
+          '// The demo deck must be served (not opened as a file) for this to work — see\n' +
+          '// `npm run demo`.';
+        kokoroConfigEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     </script>
   </body>
 </html>
