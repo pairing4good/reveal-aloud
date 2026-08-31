@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>reveal-aloud — say-engine end-to-end fixture</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css" />
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section><h2>One</h2><aside class="notes">First slide. Two sentences here.</aside></section>
+        <section><h2>Two</h2><aside class="notes">Second slide notes.</aside></section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
+    <script src="../../../dist/reveal-aloud.js"></script>
+    <script>
+      // The test harness substitutes the real port after the say-server has started.
+      window.SAY_SERVER_URL = window.SAY_SERVER_URL || 'http://127.0.0.1:5757';
+      Reveal.initialize({
+        hash: false,
+        plugins: [RevealAloud],
+        aloud: { engine: 'say', sayServerUrl: window.SAY_SERVER_URL }
+      });
+    </script>
+  </body>
+</html>

@@ -492,3 +492,29 @@ describe('choosing the speech engine', () => {
     spy.mockRestore();
   });
 });
+
+describe('choosing say as the engine', () => {
+  it('talks to the configured say-server URL', async () => {
+    document.body.innerHTML = '';
+    const deck = fakeDeck({ engine: 'say', sayServerUrl: 'http://127.0.0.1:9999' });
+    const urls = [];
+    const fetchImpl = vi.fn((url) => {
+      urls.push(String(url));
+      return Promise.resolve({
+        ok: true,
+        json: async () => [{ name: 'system-default', lang: '', default: true }]
+      });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+
+    const plugin = createPlugin({
+      indicator: { show() {}, warn() {}, progress() {}, destroy() {} },
+      clock: manualClock(),
+      scope: window
+    });
+    plugin.init(deck);
+
+    expect(urls.some((u) => u.startsWith('http://127.0.0.1:9999'))).toBe(true);
+    vi.unstubAllGlobals();
+  });
+});

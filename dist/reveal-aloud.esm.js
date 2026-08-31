@@ -603,6 +603,85 @@ function isKokoroSupported(scope = globalThis) {
   return typeof scope.WebAssembly === "object" && typeof scope.Audio === "function";
 }
 
+// src/adapters/say-speech.js
+var DEFAULT_SERVER_URL = "http://127.0.0.1:5757";
+function createSaySpeech(options = {}) {
+  const { serverUrl = DEFAULT_SERVER_URL, fetchImpl = fetch } = options;
+  let liveVoices = null;
+  const voicesListeners = /* @__PURE__ */ new Set();
+  fetchImpl(`${serverUrl}/voices`).then((res) => res.ok ? res.json() : null).then((voices) => {
+    if (!Array.isArray(voices)) return;
+    liveVoices = voices;
+    for (const listener of voicesListeners) listener();
+  }).catch(() => {
+  });
+  let liveEpoch = null;
+  let abortController = null;
+  async function speak(request, handlers) {
+    const { chunks, epoch, settings = {} } = request;
+    liveEpoch = epoch;
+    const { voice } = resolveVoice(settings);
+    const voiceName = voice ? voice.name : "";
+    for (const text of chunks) {
+      if (liveEpoch !== epoch) return;
+      abortController = new AbortController();
+      let response;
+      try {
+        response = await fetchImpl(`${serverUrl}/speak`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text, voice: voiceName, rate: settings.rate }),
+          signal: abortController.signal
+        });
+      } catch (error) {
+        if ((error == null ? void 0 : error.name) === "AbortError") return;
+        if (liveEpoch !== epoch) return;
+        liveEpoch = null;
+        handlers.onFailed(epoch, unreachableMessage(serverUrl));
+        return;
+      }
+      if (liveEpoch !== epoch) return;
+      if (!response.ok) {
+        liveEpoch = null;
+        handlers.onFailed(epoch, await describeFailure(response));
+        return;
+      }
+    }
+    if (liveEpoch === epoch) {
+      liveEpoch = null;
+      handlers.onFinished(epoch);
+    }
+  }
+  function stop() {
+    liveEpoch = null;
+    abortController == null ? void 0 : abortController.abort();
+    fetchImpl(`${serverUrl}/stop`, { method: "POST" }).catch(() => {
+    });
+  }
+  function listVoices2() {
+    return liveVoices != null ? liveVoices : [{ name: "system-default", lang: "", default: true }];
+  }
+  function resolveVoice(settings = {}) {
+    return pickVoice(listVoices2(), { name: settings.voice, lang: settings.lang });
+  }
+  function onVoicesChanged(listener) {
+    voicesListeners.add(listener);
+    return () => voicesListeners.delete(listener);
+  }
+  return { speak, stop, listVoices: listVoices2, resolveVoice, onVoicesChanged };
+}
+async function describeFailure(response) {
+  try {
+    const body = await response.json();
+    if (body == null ? void 0 : body.error) return body.error;
+  } catch {
+  }
+  return `say-server responded with ${response.status}`;
+}
+function unreachableMessage(serverUrl) {
+  return `Could not reach the say-server at ${serverUrl}. Run "node bin/say-server.js" first.`;
+}
+
 // src/adapters/reveal-deck.js
 var TEXT_NODE = 3;
 var ELEMENT_NODE = 1;
@@ -953,6 +1032,9 @@ var DEFAULTS = Object.freeze({
    *   'kokoro'    — an open-weights model that runs in the browser, sounds far less robotic,
    *                 and is also free — at the cost of a one-time model download (tens of MB)
    *                 and a short per-sentence generation delay. See demo/voices.html to compare.
+   *   'say'       — a voice already installed on the presenter's Mac, including a Siri voice
+   *                 that no browser can ever reach on its own. Needs `node bin/say-server.js`
+   *                 running alongside the deck. See the README.
    */
   engine: "webspeech",
   /** Voice name. For 'webspeech' this is whatever the OS reports; for 'kokoro' it is an id
@@ -971,6 +1053,8 @@ var DEFAULTS = Object.freeze({
   kokoroDtype: "q8",
   /** kokoro only: 'webgpu' is faster where supported; 'wasm' works everywhere. */
   kokoroDevice: "wasm",
+  /** say only: where `bin/say-server.js` is listening. */
+  sayServerUrl: "http://127.0.0.1:5757",
   /** Start narrating as soon as the deck loads (after the first keypress or click). */
   autoStart: false,
   /** The shortcut that turns narration on and off. */
@@ -1036,6 +1120,9 @@ function createPlugin(overrides = {}) {
   }
   function createSpeech() {
     var _a2, _b;
+    if (config.engine === "say") {
+      return createSaySpeech({ serverUrl: config.sayServerUrl });
+    }
     if (config.engine === "kokoro") {
       if (!isKokoroSupported(scope)) {
         (_a2 = scope.console) == null ? void 0 : _a2.warn(

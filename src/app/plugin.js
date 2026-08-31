@@ -8,6 +8,7 @@
 import { Command, Event, Status, initialState, isOn, reduce } from '../core/narrator.js';
 import { createWebSpeech, isSpeechSupported } from '../adapters/web-speech.js';
 import { createKokoroSpeech, isKokoroSupported } from '../adapters/kokoro-speech.js';
+import { createSaySpeech } from '../adapters/say-speech.js';
 import { createDeckAdapter, isPrintView } from '../adapters/reveal-deck.js';
 import { createDomIndicator, createNullIndicator } from '../adapters/dom-indicator.js';
 import { createBrowserClock } from '../adapters/browser-clock.js';
@@ -19,6 +20,9 @@ export const DEFAULTS = Object.freeze({
    *   'kokoro'    — an open-weights model that runs in the browser, sounds far less robotic,
    *                 and is also free — at the cost of a one-time model download (tens of MB)
    *                 and a short per-sentence generation delay. See demo/voices.html to compare.
+   *   'say'       — a voice already installed on the presenter's Mac, including a Siri voice
+   *                 that no browser can ever reach on its own. Needs `node bin/say-server.js`
+   *                 running alongside the deck. See the README.
    */
   engine: 'webspeech',
   /** Voice name. For 'webspeech' this is whatever the OS reports; for 'kokoro' it is an id
@@ -37,6 +41,8 @@ export const DEFAULTS = Object.freeze({
   kokoroDtype: 'q8',
   /** kokoro only: 'webgpu' is faster where supported; 'wasm' works everywhere. */
   kokoroDevice: 'wasm',
+  /** say only: where `bin/say-server.js` is listening. */
+  sayServerUrl: 'http://127.0.0.1:5757',
   /** Start narrating as soon as the deck loads (after the first keypress or click). */
   autoStart: false,
   /** The shortcut that turns narration on and off. */
@@ -124,6 +130,10 @@ export function createPlugin(overrides = {}) {
    * — init() treats a null engine as "do nothing" rather than crashing on the first keypress.
    */
   function createSpeech() {
+    if (config.engine === 'say') {
+      return createSaySpeech({ serverUrl: config.sayServerUrl });
+    }
+
     if (config.engine === 'kokoro') {
       if (!isKokoroSupported(scope)) {
         scope.console?.warn(

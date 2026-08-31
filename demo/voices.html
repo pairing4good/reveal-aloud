@@ -84,7 +84,8 @@
         white-space: pre;
         overflow-x: auto;
       }
-      #kokoroList table { margin-top: 0.6rem; }
+      #kokoroList table, #sayList table { margin-top: 0.6rem; }
+      #sayConfig { margin-top: 1.5rem; }
       .empty { padding: 2rem; text-align: center; color: #85858f; }
       @media (prefers-color-scheme: dark) {
         body { color: #e8e8ec; background: #17171a; }
@@ -146,6 +147,27 @@
 
     <div id="kokoroList"></div>
     <div id="kokoroConfig" hidden></div>
+
+    <hr style="margin:2.2rem 0; border:none; border-top:1px solid #e3e3e8;" />
+
+    <h2 style="font-size:1.15rem; margin:0 0 0.3rem;">Already downloaded good voices on your Mac?</h2>
+    <p class="sub">
+      Route through the macOS <code>say</code> command instead, and use exactly what you already
+      have in System Settings — including a Siri voice, which cannot reach a browser any other
+      way. This needs one small helper running on your own machine.
+    </p>
+
+    <div class="panel">
+      <p style="margin:0 0 0.6rem;">In a terminal, from this project:</p>
+      <pre style="margin:0; padding:0.6rem 0.8rem; background:#1e1e24; color:#e6e6ea; border-radius:6px; font-size:0.82rem; overflow-x:auto;"><code>node bin/say-server.js</code></pre>
+      <div class="controls" style="margin-top:0.8rem;">
+        <button id="sayCheck">Check for it</button>
+        <span id="sayStatus" class="sub" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div id="sayList"></div>
+    <div id="sayConfig" hidden></div>
 
     <script>
       /*
@@ -431,6 +453,112 @@
           '// The demo deck must be served (not opened as a file) for this to work — see\n' +
           '// `npm run demo`.';
         kokoroConfigEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      // -----------------------------------------------------------------------------------
+      // say: talks to the real bin/say-server.js directly, same philosophy as the two
+      // sections above — this shows exactly what your Mac's own `say -v ?` reports, live.
+      // -----------------------------------------------------------------------------------
+
+      const SAY_SERVER_URL = 'http://127.0.0.1:5757';
+
+      const sayCheckButton = document.getElementById('sayCheck');
+      const sayStatusEl = document.getElementById('sayStatus');
+      const sayListEl = document.getElementById('sayList');
+      const sayConfigEl = document.getElementById('sayConfig');
+
+      sayCheckButton.addEventListener('click', checkSayServer);
+
+      let sayAudioController = null;
+
+      async function checkSayServer() {
+        sayStatusEl.textContent = 'Checking…';
+        sayListEl.innerHTML = '';
+
+        let voices;
+        try {
+          const res = await fetch(SAY_SERVER_URL + '/voices');
+          if (!res.ok) throw new Error('server responded with ' + res.status);
+          voices = await res.json();
+        } catch (error) {
+          sayStatusEl.textContent =
+            'Not running yet at ' + SAY_SERVER_URL + '. Start it with the command above, ' +
+            'then try again.';
+          return;
+        }
+
+        sayStatusEl.textContent = 'Found it — ' + voices.length + ' voices.';
+        const table = document.createElement('table');
+        for (const voice of voices) table.appendChild(sayRowFor(voice));
+        sayListEl.appendChild(table);
+      }
+
+      function sayRowFor(voice) {
+        const row = document.createElement('tr');
+        const isDefault = voice.name === 'system-default';
+        if (isDefault) row.className = 'notable';
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'name';
+        nameCell.textContent = isDefault ? 'Your current System Voice' : voice.name;
+        if (isDefault) {
+          nameCell.appendChild(tag('reaches a Siri voice, if that is what you have set'));
+        }
+
+        const langCell = document.createElement('td');
+        langCell.className = 'lang';
+        langCell.textContent = voice.lang || '—';
+
+        const actions = document.createElement('td');
+        actions.className = 'actions';
+        const speakButton = document.createElement('button');
+        speakButton.textContent = 'Speak';
+        speakButton.addEventListener('click', () => speakSay(voice.name, speakButton));
+        const useButton = document.createElement('button');
+        useButton.textContent = 'Use this';
+        useButton.style.marginLeft = '0.4rem';
+        useButton.addEventListener('click', () => showSayConfig(voice.name));
+        actions.append(speakButton, useButton);
+
+        row.append(nameCell, langCell, actions);
+        return row;
+      }
+
+      async function speakSay(voice, button) {
+        sayAudioController?.abort();
+        sayAudioController = new AbortController();
+        button.classList.add('speaking');
+
+        try {
+          await fetch(SAY_SERVER_URL + '/speak', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              text: sampleEl.value.trim() || 'Hello.',
+              voice,
+              rate: Number(rateEl.value)
+            }),
+            signal: sayAudioController.signal
+          });
+        } catch (error) {
+          // aborted by a later click, or the server went away mid-speech — either is fine here
+        }
+        button.classList.remove('speaking');
+      }
+
+      function showSayConfig(voice) {
+        sayConfigEl.hidden = false;
+        sayConfigEl.textContent =
+          'Reveal.initialize({\n' +
+          '  plugins: [ RevealAloud ],\n' +
+          '  aloud: {\n' +
+          "    engine: 'say',\n" +
+          (voice === 'system-default' ? '' : `    voice: ${JSON.stringify(voice)},\n`) +
+          `    rate: ${Number(rateEl.value).toFixed(2)}\n` +
+          '  }\n' +
+          '});\n\n' +
+          '// Keep `node bin/say-server.js` running in a terminal while you present.';
+        sayConfigEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     </script>
   </body>
