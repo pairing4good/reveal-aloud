@@ -1,5 +1,9 @@
 # reveal-aloud
 
+[![CI](https://github.com/pairing4good/reveal-aloud/actions/workflows/ci.yml/badge.svg)](https://github.com/pairing4good/reveal-aloud/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/reveal-aloud.svg)](https://www.npmjs.com/package/reveal-aloud)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Reads your [reveal.js](https://revealjs.com) speaker notes out loud while you present.
 
 You drive the slides. It reads the notes for whatever slide you are on, stops the moment you
@@ -184,17 +188,46 @@ says so and falls back to the default. Run `RevealAloud.listVoices()` to see the
 
 ```bash
 npm install
-npm test          # unit, property and adapter tests
-npm run test:e2e  # the real demo deck, in a real browser
-npm run test:soak # property tests with far more generated cases
-npm run verify    # lint + build + everything
+npm test           # unit, property and adapter tests
+npm run test:e2e   # the real demo deck, in a real browser
+npm run test:soak  # property tests with far more generated cases
+npm run verify     # lint + build + everything
+npm run build:site # assemble the demo into _site/, as GitHub Pages serves it
 ```
+
+The end-to-end tests need a browser: `npx playwright install chromium`. Without one they skip
+with a note rather than failing, so a first `npm test` works on a clean checkout.
+
+The strongest test in the suite is `what actually reaches the speech engine` in
+`test/e2e/demo-deck.test.js`. It walks every slide of the demo deck in a real browser, records
+every string handed to `speechSynthesis.speak()`, and checks two things independently: that the
+engine received exactly the utterances the plugin intends, and that no phrase from any bracketed
+span anywhere in the deck appears in any of them. The bracket list is read out of the deck's
+HTML rather than from the plugin, so the check still holds if the plugin's own idea of what is
+silent were ever wrong.
 
 The code is a [hexagon](https://alistair.cockburn.us/hexagonal-architecture/): `src/core/` is
 pure — no DOM, no timers, no speech, no reveal.js — and holds every decision about what gets
 spoken. `src/adapters/` holds everything with a side effect. A lint rule fails the build if the
 core reaches for the browser, so a `say`-command adapter can be dropped in later without
 touching a line of the decision-making code.
+
+## Continuous integration
+
+Every push and pull request runs lint, build, the full test suite on Node 20 and 22, and the
+end-to-end suite in a real browser. A separate job re-runs the property tests with far more
+generated cases. CI also fails if the committed `dist/` bundle has drifted from `src/`, since
+the CDN and the double-click demo both serve it.
+
+Two more workflows are set up but stay out of the way until you want them:
+
+- **Release** (`.github/workflows/release.yml`) publishes to npm when you push a version tag
+  (`npm version minor && git push --follow-tags`). It re-runs the whole suite first and refuses
+  to publish if the tag and `package.json` disagree. Needs an `NPM_TOKEN` secret.
+- **Demo** (`.github/workflows/pages.yml`) publishes the demo deck to GitHub Pages. To switch it
+  on: Settings → Pages → Source: *GitHub Actions*, then add a repository variable
+  `DEPLOY_DEMO = true`. It is gated on that variable so it cannot turn the badge red before
+  Pages has been enabled.
 
 ## License
 

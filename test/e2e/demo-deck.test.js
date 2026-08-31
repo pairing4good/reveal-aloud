@@ -140,6 +140,29 @@ async function speakToTheEnd() {
   }
 }
 
+/** Lowercased, punctuation-free, single-spaced — so comparison is about words, not typography. */
+function normalizeForComparison(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Overlapping three-word phrases from a stage direction.
+ *
+ * Whole-span matching would miss a partial leak, and single words produce false alarms — a
+ * stage direction may legitimately share a word with the sentence around it ("[check the
+ * clock, is it still morning?]" next to "Good morning, everyone"). Three words in a row
+ * appearing in both is a leak, not a coincidence.
+ */
+function phrasesOf(span) {
+  const words = normalizeForComparison(span).split(' ').filter(Boolean);
+  if (words.length === 0) return [];
+  if (words.length < 3) return [words.join(' ')];
+  return words.slice(0, -2).map((_, i) => words.slice(i, i + 3).join(' '));
+}
+
 const said = () => page.evaluate(() => window.__said);
 const clearSaid = () => page.evaluate(() => (window.__said.length = 0));
 const goToSlide = (index) => page.evaluate((i) => window.Reveal.slide(i), index);
@@ -313,6 +336,129 @@ describe('the demo deck in a real browser', () => {
     await page.keyboard.press('b'); // blackout
     await page.waitForTimeout(200);
     expect(await page.evaluate(() => window.Reveal.isPaused())).toBe(true);
+  });
+});
+
+describe('what actually reaches the speech engine', () => {
+  /**
+   * The strongest statement this project can make, checked at the real boundary.
+   *
+   * `window.speechSynthesis.speak()` is the last thing the plugin touches before the operating
+   * system does — past the core, past the adapter, past every layer. This walks the entire demo
+   * deck, records every string handed to that call, and holds it against two independent checks:
+   *
+   *   1. the engine received exactly the utterances the plugin says it should, slide by slide;
+   *   2. no stage direction — no bracketed span anywhere in the deck — appears in any of them.
+   *
+   * The second check reads the brackets straight out of the deck's HTML, so it stays honest
+   * even if the plugin's own idea of what is silent were ever wrong, and any slide added to the
+   * demo later is covered without touching this test.
+   */
+  it('is exactly the spoken text, and never one word of a stage direction', async () => {
+    const slideCount = await page.evaluate(() => window.Reveal.getSlides().length);
+    await page.keyboard.press('r');
+
+    const findings = [];
+
+    for (let index = 0; index < slideCount; index++) {
+      await clearSaid();
+      await page.evaluate((n) => {
+        const slide = window.Reveal.getSlides()[n];
+        const { h, v } = window.Reveal.getIndices(slide);
+        window.Reveal.slide(h, v);
+      }, index);
+      await speakToTheEnd();
+
+      findings.push(
+        await page.evaluate((n) => {
+          const slide = window.Reveal.getSlides()[n];
+
+          /** The note exactly as the author wrote it in the HTML. */
+          const raw = slide.hasAttribute('data-notes')
+            ? slide.getAttribute('data-notes')
+            : [...slide.querySelectorAll('aside.notes')]
+                .filter((aside) => aside.closest('section') === slide)
+                .map((aside) => aside.textContent)
+                .join('\n');
+
+          /** Every bracketed span, read out of the markup rather than from the plugin. */
+          const silentSpans = [];
+          let depth = 0;
+          let current = '';
+          for (let i = 0; i < raw.length; i++) {
+            const char = raw[i];
+            if (char === '\\' && (raw[i + 1] === '[' || raw[i + 1] === ']')) {
+              if (depth > 0) current += raw[i + 1];
+              i++;
+              continue;
+            }
+            if (char === '[') {
+              depth++;
+              continue;
+            }
+            if (char === ']') {
+              if (depth > 0 && --depth === 0) {
+                silentSpans.push(current);
+                current = '';
+              }
+              continue;
+            }
+            if (depth > 0) current += char;
+          }
+          if (depth > 0) silentSpans.push(current); // an unclosed bracket runs to the end
+
+          return {
+            title: slide.querySelector('h2')?.textContent?.trim() ?? '(title slide)',
+            said: window.__said.slice(),
+            expected: window.RevealAloud.preview(slide).chunks,
+            silentSpans
+          };
+        }, index)
+      );
+    }
+
+    expect(findings).toHaveLength(slideCount);
+
+    for (const { title, said, expected, silentSpans } of findings) {
+      // 1. The engine got exactly the utterances the plugin intends, in order.
+      expect(said, `utterances handed to the engine on "${title}"`).toEqual(expected);
+
+      // 2. No phrase from any stage direction survived into any of them.
+      const spoken = normalizeForComparison(said.join(' '));
+      for (const span of silentSpans) {
+        for (const phrase of phrasesOf(span)) {
+          expect(
+            spoken.includes(phrase),
+            `"${phrase}" is inside brackets on "${title}" but reached the speech engine`
+          ).toBe(false);
+        }
+      }
+    }
+
+    // The sweep is worthless if the deck stopped speaking altogether, so prove it spoke.
+    const totalUtterances = findings.reduce((sum, f) => sum + f.said.length, 0);
+    expect(totalUtterances).toBeGreaterThan(20);
+    expect(findings.filter((f) => f.silentSpans.length > 0).length).toBeGreaterThan(5);
+  }, 90_000);
+
+  it('hands the engine nothing at all on a slide that is pure stage direction', async () => {
+    await page.keyboard.press('r');
+    await clearSaid();
+
+    await goToSlide(3); // the note on this slide is one bracketed span and nothing else
+    await speakToTheEnd();
+
+    expect(await said()).toEqual([]);
+  });
+
+  it('does hand over a bracket the author escaped', async () => {
+    await page.keyboard.press('r');
+    await clearSaid();
+
+    await goToSlide(8);
+    await speakToTheEnd();
+
+    expect((await said()).join(' ')).toContain('[optional]');
   });
 });
 

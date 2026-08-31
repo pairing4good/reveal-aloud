@@ -1,0 +1,50 @@
+name: Demo
+
+# Publishes the demo deck to GitHub Pages so there is a link to point people at.
+#
+# Off until you ask for it, because Pages has to be enabled on the repository first and a
+# workflow that fails for want of a setting is just a red badge. To turn it on:
+#   1. Settings → Pages → Build and deployment → Source: GitHub Actions
+#   2. Settings → Secrets and variables → Actions → Variables → new variable
+#      DEPLOY_DEMO = true
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy the demo deck
+    if: vars.DEPLOY_DEMO == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

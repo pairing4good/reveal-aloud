@@ -1,0 +1,50 @@
+name: Release
+
+# Publishes to npm when a version tag is pushed:
+#   npm version minor && git push --follow-tags
+#
+# Requires an NPM_TOKEN secret with publish rights (an npm automation token).
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # lets npm attach a provenance statement to the release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # Never publish something that does not pass. The tag is not a shortcut past the gate.
+      - run: npm run lint
+      - run: npm run build
+      - run: git diff --exit-code -- dist
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+      - name: Check the tag matches the version in package.json
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          packaged="$(node -p "require('./package.json').version")"
+          if [ "$tagged" != "$packaged" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $packaged" >&2
+            exit 1
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

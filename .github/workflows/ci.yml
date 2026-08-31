@@ -4,31 +4,67 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Lint, build and test (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
+
       - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the committed bundle matches the source
+        # dist/ is committed so the deck works from a CDN and from a plain file:// open.
+        # If it drifts from src/, everyone downstream gets stale code.
+        run: git diff --exit-code -- dist
+
+      - name: Unit, property and adapter tests
+        run: npm test
+
+      - name: Install a browser for the end-to-end tests
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests against the demo deck
+        run: npm run test:e2e
 
   soak:
+    name: Property tests, many more cases
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+
       - run: npm ci
-      # Property tests with far more generated cases than the normal run.
-      - run: npm run test:soak
+
+      # The normal run uses 100 cases per property to stay fast. This one turns the dial up,
+      # which is where the awkward inputs tend to surface.
+      - name: Soak
+        run: npm run test:soak
