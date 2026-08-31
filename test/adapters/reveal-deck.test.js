@@ -3,6 +3,8 @@
  *
  * This is the one place the project touches the page, so the rules about *which* notes belong
  * to the current slide are pinned down here rather than in the core.
+ *
+ * @vitest-environment jsdom
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -5,7 +5,8 @@ export default defineConfig({
     // Unit + property + adapter tests. The e2e suite has its own config because it
     // needs a real browser and a built bundle.
     include: ['test/{core,adapters,property}/**/*.test.js'],
-    environment: 'node',
-    environmentMatchGlobs: [['test/adapters/**', 'jsdom']]
+    // Node by default; the three adapter suites that need a DOM ask for jsdom themselves
+    // with an `@vitest-environment jsdom` directive, so each file states its own needs.
+    environment: 'node'
   }
 });

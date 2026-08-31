@@ -2,6 +2,8 @@
  * The status badge. Its whole job is telling three situations apart that otherwise all look
  * like "nothing is happening": narration is off, this slide has no notes, and the browser is
  * still waiting for a gesture before it will make sound.
+ *
+ * @vitest-environment jsdom
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';

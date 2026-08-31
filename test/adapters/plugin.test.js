@@ -5,6 +5,8 @@
  * works. What is only visible here is the seam between them — in particular the delayed start,
  * which is what stops a held-down arrow key from stuttering the first syllable of ten slides,
  * and which must be cancelled when the presenter moves on again before it fires.
+ *
+ * @vitest-environment jsdom
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
