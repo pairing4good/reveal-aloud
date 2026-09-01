@@ -1,0 +1,125 @@
+/* Styling for the demo deck only — the plugin itself needs no CSS file. */
+
+.reveal .slides section {
+  text-align: left;
+  padding-top: 1.2em;
+}
+
+.reveal h2 {
+  font-size: 1.5em;
+  margin-bottom: 0.3em;
+}
+
+.reveal .lead {
+  font-size: 0.68em;
+  color: #444;
+  margin: 0 0 0.8em;
+}
+
+.reveal .hint {
+  font-size: 0.5em;
+  color: #666;
+}
+
+.reveal .big-key {
+  font-size: 0.9em;
+  margin: 0.6em 0;
+}
+
+.reveal kbd {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  border: 1px solid #bbb;
+  border-bottom-width: 3px;
+  border-radius: 5px;
+  background: #fafafa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.reveal pre.config {
+  width: 100%;
+  font-size: 0.4em;
+  box-shadow: none;
+  border: 1px solid #e2e2e2;
+}
+
+/* ---- the "what gets read" panel ---- */
+
+.aloud-panel {
+  box-sizing: border-box;
+  /* Long notes scroll rather than pushing the slide off the bottom. */
+  max-height: 330px;
+  overflow-y: auto;
+  margin-top: 1em;
+  padding: 0.7em 0.9em;
+  border: 1px solid #e0e0e0;
+  border-left: 4px solid #3b82f6;
+  border-radius: 6px;
+  background: #fbfbfd;
+  font-size: 0.42em;
+  line-height: 1.5;
+}
+
+.aloud-panel__row {
+  display: flex;
+  gap: 0.8em;
+  align-items: baseline;
+  padding: 0.25em 0;
+}
+
+.aloud-panel__row + .aloud-panel__row {
+  border-top: 1px solid #ececf2;
+}
+
+.aloud-panel__label {
+  flex: 0 0 7.5em;
+  color: #8a8a99;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8em;
+}
+
+.aloud-panel__label--hear {
+  color: #2563eb;
+}
+
+.aloud-panel__notes,
+.aloud-panel__heard {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #222;
+  white-space: pre-wrap;
+}
+
+/* Text between brackets: shown, but never spoken. */
+.aloud-silent {
+  color: #b0b0bb;
+  text-decoration: line-through;
+}
+
+/* A bracket the author escaped, so it *is* spoken. */
+.aloud-escaped {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.aloud-chunk {
+  display: inline-block;
+  margin: 0 0.25em 0.25em 0;
+  padding: 0.1em 0.45em;
+  border-radius: 4px;
+  background: #e0edff;
+  color: #1e3a8a;
+}
+
+.aloud-panel__none,
+.aloud-panel__silent {
+  color: #b0b0bb;
+  font-style: italic;
+}
+
+.aloud-panel__warning {
+  margin-top: 0.5em;
+  color: #b45309;
+}

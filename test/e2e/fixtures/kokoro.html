@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>reveal-aloud — Kokoro end-to-end fixture</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css" />
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section><h2>One</h2><aside class="notes">First slide. Two sentences here.</aside></section>
+        <section><h2>Two</h2><aside class="notes">Second slide notes.</aside></section>
+        <section><h2>Three, no notes</h2></section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
+    <script src="../../../dist/reveal-aloud.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: false,
+        plugins: [RevealAloud],
+        aloud: {
+          engine: 'kokoro',
+          kokoroModuleUrl: '/test/e2e/fixtures/fake-kokoro-js.js',
+          voice: 'af_heart'
+        }
+      });
+    </script>
+  </body>
+</html>

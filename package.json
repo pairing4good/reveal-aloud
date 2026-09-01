@@ -1,0 +1,65 @@
+{
+  "name": "reveal-aloud",
+  "version": "0.1.0",
+  "description": "Read your reveal.js speaker notes aloud. Press R. Text in [brackets] stays silent.",
+  "type": "module",
+  "main": "dist/reveal-aloud.js",
+  "module": "dist/reveal-aloud.esm.js",
+  "exports": {
+    ".": {
+      "import": "./dist/reveal-aloud.esm.js",
+      "default": "./dist/reveal-aloud.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "bin",
+    "README.md",
+    "ENGINES.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "build:site": "npm run build && node scripts/build-site.js",
+    "demo": "npm run build && node scripts/serve.js",
+    "lint": "eslint src test demo bin build.js scripts",
+    "say-server": "node bin/say-server.js",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.js",
+    "test:soak": "FC_NUM_RUNS=20000 vitest run test/property",
+    "test:watch": "vitest",
+    "verify": "npm run lint && npm run build && npm test && npm run test:e2e"
+  },
+  "keywords": [
+    "reveal.js",
+    "reveal",
+    "speaker-notes",
+    "text-to-speech",
+    "tts",
+    "narration",
+    "speech-synthesis",
+    "presentation",
+    "say"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pairing4good/reveal-aloud.git"
+  },
+  "homepage": "https://github.com/pairing4good/reveal-aloud#readme",
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.13.0",
+    "fast-check": "^3.22.0",
+    "globals": "^15.11.0",
+    "jsdom": "^25.0.1",
+    "playwright": "^1.48.0",
+    "reveal.js": "^5.2.1",
+    "vitest": "^4.1.11"
+  },
+  "bin": {
+    "reveal-aloud-say-server": "bin/say-server.js"
+  }
+}

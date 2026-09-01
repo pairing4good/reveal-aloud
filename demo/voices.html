@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>reveal-aloud — what voices do I actually have?</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0 auto;
+        max-width: 940px;
+        padding: 2rem 1.25rem 4rem;
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        color: #1c1c1f;
+        background: #fff;
+      }
+      h1 { font-size: 1.5rem; margin: 0 0 0.3rem; }
+      .sub { color: #666; margin: 0 0 1.5rem; }
+      .panel {
+        padding: 1rem 1.1rem;
+        border: 1px solid #e3e3e8;
+        border-radius: 10px;
+        background: #fafafc;
+        margin-bottom: 1.5rem;
+      }
+      .panel label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.86rem; }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 4.5em;
+        padding: 0.6rem;
+        border: 1px solid #d5d5dd;
+        border-radius: 6px;
+        font: inherit;
+        resize: vertical;
+      }
+      .controls { display: flex; gap: 1.5rem; align-items: center; margin-top: 0.8rem; flex-wrap: wrap; }
+      .controls input[type="range"] { vertical-align: middle; }
+      #summary { margin-bottom: 1.25rem; font-size: 0.92rem; }
+      #summary .verdict { font-weight: 600; }
+      .group-title {
+        margin: 1.6rem 0 0.5rem;
+        font-size: 0.78rem;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: #85858f;
+      }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: middle; }
+      td.name { font-weight: 500; }
+      td.lang { color: #85858f; font-variant-numeric: tabular-nums; width: 6rem; }
+      td.actions { width: 12rem; text-align: right; }
+      tr.notable { background: #f2f8ff; }
+      button {
+        padding: 0.32rem 0.8rem;
+        border: 1px solid #c9c9d2;
+        border-radius: 6px;
+        background: #fff;
+        font: inherit;
+        font-size: 0.86rem;
+        cursor: pointer;
+      }
+      button:hover { background: #f0f0f4; }
+      button.speaking { background: #2563eb; border-color: #2563eb; color: #fff; }
+      .tag {
+        display: inline-block;
+        margin-left: 0.5rem;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1e40af;
+        font-size: 0.72rem;
+        font-weight: 600;
+      }
+      .tag--default { background: #e8e8ee; color: #55555f; }
+      #kokoroConfig, #config {
+        margin-top: 1.5rem;
+        padding: 0.9rem 1rem;
+        border-radius: 8px;
+        background: #1e1e24;
+        color: #e6e6ea;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.82rem;
+        white-space: pre;
+        overflow-x: auto;
+      }
+      #kokoroList table, #sayList table { margin-top: 0.6rem; }
+      #sayConfig { margin-top: 1.5rem; }
+      .empty { padding: 2rem; text-align: center; color: #85858f; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #e8e8ec; background: #17171a; }
+        .panel { background: #1e1e23; border-color: #33333c; }
+        textarea, button { background: #1e1e23; color: inherit; border-color: #3d3d47; }
+        button:hover { background: #2a2a31; }
+        td { border-bottom-color: #2a2a31; }
+        tr.notable { background: #1b2534; }
+        .sub, .lang, .group-title, .empty { color: #9a9aa4; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>What voices do I actually have?</h1>
+    <p class="sub">
+      Every voice this browser will let reveal-aloud use, on this machine. Press a
+      <strong>Speak</strong> button to hear it, then copy the config for the one you like.
+      See <a href="../ENGINES.md">ENGINES.md</a> for a side-by-side comparison of the three
+      sections below and what setup each one needs.
+    </p>
+
+    <div class="panel">
+      <label for="sample">Sample text</label>
+      <textarea id="sample">Good morning, and thanks for coming. Today we are going to look at why the build got slower, what we tried, and what actually fixed it.</textarea>
+      <div class="controls">
+        <span><label for="rate" style="display:inline">Speed</label>
+          <input id="rate" type="range" min="0.5" max="2" step="0.05" value="1" />
+          <span id="rateValue">1.00</span></span>
+        <button id="stop">Stop</button>
+      </div>
+    </div>
+
+    <div id="summary"></div>
+    <div id="list"><p class="empty">Loading voices…</p></div>
+    <div id="config" hidden></div>
+
+    <hr style="margin:2.2rem 0; border:none; border-top:1px solid #e3e3e8;" />
+
+    <h2 style="font-size:1.15rem; margin:0 0 0.3rem;">Not good enough? Try Kokoro.</h2>
+    <p class="sub">
+      An open, free text-to-speech model that runs entirely in this browser tab — no account,
+      no server, no per-use cost. It sounds far less robotic than the system voices above. The
+      cost is a one-time download (tens of MB) and a short pause before each sentence while it
+      generates the audio.
+    </p>
+
+    <div class="panel">
+      <div id="kokoroIdle">
+        <button id="kokoroLoad">Load Kokoro (~90 MB, one-time)</button>
+      </div>
+      <div id="kokoroLoading" hidden>
+        <label>Downloading the voice model…</label>
+        <div style="height:8px; border-radius:4px; background:#e3e3e8; overflow:hidden; margin-top:0.4rem;">
+          <div id="kokoroBar" style="height:100%; width:0%; background:#2563eb; transition:width 150ms;"></div>
+        </div>
+        <p id="kokoroLoadingText" class="sub" style="margin:0.4rem 0 0;"></p>
+      </div>
+      <p id="kokoroError" class="sub" hidden style="color:#b91c1c;"></p>
+    </div>
+
+    <div id="kokoroList"></div>
+    <div id="kokoroConfig" hidden></div>
+
+    <hr style="margin:2.2rem 0; border:none; border-top:1px solid #e3e3e8;" />
+
+    <h2 style="font-size:1.15rem; margin:0 0 0.3rem;">Already downloaded good voices on your Mac?</h2>
+    <p class="sub">
+      Route through the macOS <code>say</code> command instead, and use exactly what you already
+      have in System Settings — including a Siri voice, which cannot reach a browser any other
+      way. This needs one small helper running on your own machine.
+    </p>
+
+    <div class="panel">
+      <p style="margin:0 0 0.6rem;">In a terminal, from this project:</p>
+      <pre style="margin:0; padding:0.6rem 0.8rem; background:#1e1e24; color:#e6e6ea; border-radius:6px; font-size:0.82rem; overflow-x:auto;"><code>node bin/say-server.js</code></pre>
+      <div class="controls" style="margin-top:0.8rem;">
+        <button id="sayCheck">Check for it</button>
+        <span id="sayStatus" class="sub" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div id="sayList"></div>
+    <div id="sayConfig" hidden></div>
+
+    <script>
+      /*
+       * A diagnostic page, deliberately independent of the plugin: it talks to
+       * speechSynthesis directly so that what you see here is exactly what the browser
+       * reports, with nothing of ours in between.
+       */
+      const listEl = document.getElementById('list');
+      const summaryEl = document.getElementById('summary');
+      const configEl = document.getElementById('config');
+      const sampleEl = document.getElementById('sample');
+      const rateEl = document.getElementById('rate');
+      const rateValueEl = document.getElementById('rateValue');
+
+      /* Names that signal a higher-quality voice on one platform or another. */
+      const NOTABLE = /\((?:enhanced|premium|natural)\)|natural|neural|online|google|microsoft/i;
+
+      let speakingButton = null;
+
+      rateEl.addEventListener('input', () => {
+        rateValueEl.textContent = Number(rateEl.value).toFixed(2);
+      });
+      document.getElementById('stop').addEventListener('click', stopSpeaking);
+
+      function stopSpeaking() {
+        speechSynthesis.cancel();
+        speakingButton?.classList.remove('speaking');
+        speakingButton = null;
+      }
+
+      function speak(voice, button) {
+        stopSpeaking();
+        const utterance = new SpeechSynthesisUtterance(sampleEl.value.trim() || 'Hello.');
+        utterance.voice = voice;
+        utterance.rate = Number(rateEl.value);
+        utterance.onend = () => button.classList.remove('speaking');
+        button.classList.add('speaking');
+        speakingButton = button;
+        speechSynthesis.speak(utterance);
+      }
+
+      function showConfig(voice) {
+        configEl.hidden = false;
+        configEl.textContent =
+          'Reveal.initialize({\n' +
+          '  plugins: [ RevealAloud ],\n' +
+          '  aloud: {\n' +
+          `    voice: ${JSON.stringify(voice.name)},\n` +
+          `    lang: ${JSON.stringify(voice.lang)},\n` +
+          `    rate: ${Number(rateEl.value).toFixed(2)}\n` +
+          '  }\n' +
+          '});';
+        configEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function render() {
+        const voices = speechSynthesis.getVoices();
+        if (voices.length === 0) {
+          listEl.innerHTML = '<p class="empty">This browser reports no voices at all.</p>';
+          return;
+        }
+
+        renderSummary(voices);
+
+        // English first — that is what most decks need — then everything else by language.
+        const groups = new Map();
+        for (const voice of voices) {
+          const key = (voice.lang || 'unknown').toLowerCase();
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(voice);
+        }
+        const keys = [...groups.keys()].sort((a, b) => {
+          const aEn = a.startsWith('en');
+          const bEn = b.startsWith('en');
+          if (aEn !== bEn) return aEn ? -1 : 1;
+          return a.localeCompare(b);
+        });
+
+        listEl.innerHTML = '';
+        for (const key of keys) {
+          const title = document.createElement('p');
+          title.className = 'group-title';
+          title.textContent = key;
+          listEl.appendChild(title);
+
+          const table = document.createElement('table');
+          for (const voice of groups.get(key)) table.appendChild(rowFor(voice));
+          listEl.appendChild(table);
+        }
+      }
+
+      function rowFor(voice) {
+        const row = document.createElement('tr');
+        if (NOTABLE.test(voice.name)) row.className = 'notable';
+
+        const name = document.createElement('td');
+        name.className = 'name';
+        name.textContent = voice.name;
+        if (NOTABLE.test(voice.name)) name.appendChild(tag('higher quality'));
+        if (voice.default) name.appendChild(tag('system default', 'tag--default'));
+
+        const lang = document.createElement('td');
+        lang.className = 'lang';
+        lang.textContent = voice.lang;
+
+        const actions = document.createElement('td');
+        actions.className = 'actions';
+        const speakButton = document.createElement('button');
+        speakButton.textContent = 'Speak';
+        speakButton.addEventListener('click', () => speak(voice, speakButton));
+        const useButton = document.createElement('button');
+        useButton.textContent = 'Use this';
+        useButton.style.marginLeft = '0.4rem';
+        useButton.addEventListener('click', () => showConfig(voice));
+        actions.append(speakButton, useButton);
+
+        row.append(name, lang, actions);
+        return row;
+      }
+
+      function tag(text, extra) {
+        const el = document.createElement('span');
+        el.className = extra ? `tag ${extra}` : 'tag';
+        el.textContent = text;
+        return el;
+      }
+
+      function renderSummary(voices) {
+        const english = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('en'));
+        const notable = voices.filter((v) => NOTABLE.test(v.name));
+        const verdict = notable.length
+          ? `${notable.length} look like higher-quality voices — try those first.`
+          : 'None of these look like higher-quality voices. This is the base set, and it is ' +
+            'as good as this browser on this machine gets.';
+
+        summaryEl.innerHTML =
+          `<span class="verdict">${voices.length} voices</span> ` +
+          `(${english.length} English). ${verdict}`;
+      }
+
+      // Chrome reports an empty list on the first call and fills it in asynchronously.
+      speechSynthesis.addEventListener('voiceschanged', render);
+      render();
+
+      // -----------------------------------------------------------------------------------
+      // Kokoro: talks to the real `kokoro-js` library directly, the same way this page talks
+      // to speechSynthesis directly above — so what you see here is genuinely what the
+      // library does, not reveal-aloud's abstraction over it.
+      // -----------------------------------------------------------------------------------
+
+      const KOKORO_MODULE_URL = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm';
+      const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+
+      /** English voices, so something plays even before the full list has loaded. */
+      const KOKORO_VOICE_HINTS = {
+        af_heart: 'warm, American — the model’s own default',
+        af_bella: 'elegant, American',
+        af_nicole: 'calm, American',
+        am_adam: 'youthful, American',
+        am_michael: 'steady, American',
+        bf_emma: 'British',
+        bm_george: 'British'
+      };
+
+      const kokoroIdle = document.getElementById('kokoroIdle');
+      const kokoroLoading = document.getElementById('kokoroLoading');
+      const kokoroBar = document.getElementById('kokoroBar');
+      const kokoroLoadingText = document.getElementById('kokoroLoadingText');
+      const kokoroError = document.getElementById('kokoroError');
+      const kokoroListEl = document.getElementById('kokoroList');
+      const kokoroConfigEl = document.getElementById('kokoroConfig');
+
+      document.getElementById('kokoroLoad').addEventListener('click', loadKokoro);
+
+      let kokoroTts = null;
+      let kokoroSpeakingButton = null;
+      let kokoroAudio = null;
+
+      async function loadKokoro() {
+        kokoroIdle.hidden = true;
+        kokoroLoading.hidden = false;
+        kokoroError.hidden = true;
+
+        try {
+          const { KokoroTTS } = await import(/* @vite-ignore */ KOKORO_MODULE_URL);
+          kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+            dtype: 'q8',
+            device: 'wasm',
+            progress_callback: (update) => {
+              if (typeof update?.loaded !== 'number' || !update.total) return;
+              const pct = Math.round((update.loaded / update.total) * 100);
+              kokoroBar.style.width = pct + '%';
+              kokoroLoadingText.textContent = pct + '%';
+            }
+          });
+        } catch (error) {
+          kokoroLoading.hidden = true;
+          kokoroError.hidden = false;
+          kokoroError.textContent =
+            'Could not load Kokoro: ' +
+            (error?.message || error) +
+            '. This needs an internet connection to cdn.jsdelivr.net the first time.';
+          kokoroIdle.hidden = false;
+          return;
+        }
+
+        kokoroLoading.hidden = true;
+        renderKokoroVoices();
+      }
+
+      function renderKokoroVoices() {
+        const names =
+          typeof kokoroTts.list_voices === 'function'
+            ? kokoroTts.list_voices()
+            : Object.keys(KOKORO_VOICE_HINTS);
+
+        const table = document.createElement('table');
+        for (const name of names) table.appendChild(kokoroRowFor(name));
+        kokoroListEl.innerHTML = '';
+        kokoroListEl.appendChild(table);
+      }
+
+      function kokoroRowFor(name) {
+        const row = document.createElement('tr');
+        const hint = KOKORO_VOICE_HINTS[name];
+        if (hint) row.className = 'notable';
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'name';
+        nameCell.textContent = name;
+        if (hint) nameCell.appendChild(tag(hint));
+
+        const langCell = document.createElement('td');
+        langCell.className = 'lang';
+        langCell.textContent = name.startsWith('b') ? 'en-GB' : name.startsWith('a') ? 'en-US' : '';
+
+        const actions = document.createElement('td');
+        actions.className = 'actions';
+        const speakButton = document.createElement('button');
+        speakButton.textContent = 'Speak';
+        speakButton.addEventListener('click', () => speakKokoro(name, speakButton));
+        const useButton = document.createElement('button');
+        useButton.textContent = 'Use this';
+        useButton.style.marginLeft = '0.4rem';
+        useButton.addEventListener('click', () => showKokoroConfig(name));
+        actions.append(speakButton, useButton);
+
+        row.append(nameCell, langCell, actions);
+        return row;
+      }
+
+      async function speakKokoro(voice, button) {
+        kokoroAudio?.pause();
+        kokoroSpeakingButton?.classList.remove('speaking');
+        button.classList.add('speaking');
+        kokoroSpeakingButton = button;
+
+        const text = sampleEl.value.trim() || 'Hello.';
+        const audio = await kokoroTts.generate(text, { voice });
+        const blob = audio.toBlob();
+        const url = URL.createObjectURL(blob);
+        kokoroAudio = new Audio(url);
+        kokoroAudio.playbackRate = Number(rateEl.value);
+        kokoroAudio.onended = () => {
+          URL.revokeObjectURL(url);
+          button.classList.remove('speaking');
+        };
+        kokoroAudio.play();
+      }
+
+      function showKokoroConfig(voice) {
+        kokoroConfigEl.hidden = false;
+        kokoroConfigEl.textContent =
+          'Reveal.initialize({\n' +
+          '  plugins: [ RevealAloud ],\n' +
+          '  aloud: {\n' +
+          "    engine: 'kokoro',\n" +
+          `    voice: ${JSON.stringify(voice)},\n` +
+          `    rate: ${Number(rateEl.value).toFixed(2)}\n` +
+          '  }\n' +
+          '});\n\n' +
+          '// First load is a one-time ~90MB download, cached by the browser after that.\n' +
+          '// The demo deck must be served (not opened as a file) for this to work — see\n' +
+          '// `npm run demo`.';
+        kokoroConfigEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      // -----------------------------------------------------------------------------------
+      // say: talks to the real bin/say-server.js directly, same philosophy as the two
+      // sections above — this shows exactly what your Mac's own `say -v ?` reports, live.
+      // -----------------------------------------------------------------------------------
+
+      const SAY_SERVER_URL = 'http://127.0.0.1:5757';
+
+      const sayCheckButton = document.getElementById('sayCheck');
+      const sayStatusEl = document.getElementById('sayStatus');
+      const sayListEl = document.getElementById('sayList');
+      const sayConfigEl = document.getElementById('sayConfig');
+
+      sayCheckButton.addEventListener('click', checkSayServer);
+
+      let sayAudioController = null;
+
+      async function checkSayServer() {
+        sayStatusEl.textContent = 'Checking…';
+        sayListEl.innerHTML = '';
+
+        let voices;
+        try {
+          const res = await fetch(SAY_SERVER_URL + '/voices');
+          if (!res.ok) throw new Error('server responded with ' + res.status);
+          voices = await res.json();
+        } catch (error) {
+          sayStatusEl.textContent =
+            'Not running yet at ' + SAY_SERVER_URL + '. Start it with the command above, ' +
+            'then try again.';
+          return;
+        }
+
+        sayStatusEl.textContent = 'Found it — ' + voices.length + ' voices.';
+        const table = document.createElement('table');
+        for (const voice of voices) table.appendChild(sayRowFor(voice));
+        sayListEl.appendChild(table);
+      }
+
+      function sayRowFor(voice) {
+        const row = document.createElement('tr');
+        const isDefault = voice.name === 'system-default';
+        if (isDefault) row.className = 'notable';
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'name';
+        nameCell.textContent = isDefault ? 'Your current System Voice' : voice.name;
+        if (isDefault) {
+          nameCell.appendChild(tag('reaches a Siri voice, if that is what you have set'));
+        }
+
+        const langCell = document.createElement('td');
+        langCell.className = 'lang';
+        langCell.textContent = voice.lang || '—';
+
+        const actions = document.createElement('td');
+        actions.className = 'actions';
+        const speakButton = document.createElement('button');
+        speakButton.textContent = 'Speak';
+        speakButton.addEventListener('click', () => speakSay(voice.name, speakButton));
+        const useButton = document.createElement('button');
+        useButton.textContent = 'Use this';
+        useButton.style.marginLeft = '0.4rem';
+        useButton.addEventListener('click', () => showSayConfig(voice.name));
+        actions.append(speakButton, useButton);
+
+        row.append(nameCell, langCell, actions);
+        return row;
+      }
+
+      async function speakSay(voice, button) {
+        sayAudioController?.abort();
+        sayAudioController = new AbortController();
+        button.classList.add('speaking');
+
+        try {
+          await fetch(SAY_SERVER_URL + '/speak', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              text: sampleEl.value.trim() || 'Hello.',
+              voice,
+              rate: Number(rateEl.value)
+            }),
+            signal: sayAudioController.signal
+          });
+        } catch (error) {
+          // aborted by a later click, or the server went away mid-speech — either is fine here
+        }
+        button.classList.remove('speaking');
+      }
+
+      function showSayConfig(voice) {
+        sayConfigEl.hidden = false;
+        sayConfigEl.textContent =
+          'Reveal.initialize({\n' +
+          '  plugins: [ RevealAloud ],\n' +
+          '  aloud: {\n' +
+          "    engine: 'say',\n" +
+          (voice === 'system-default' ? '' : `    voice: ${JSON.stringify(voice)},\n`) +
+          `    rate: ${Number(rateEl.value).toFixed(2)}\n` +
+          '  }\n' +
+          '});\n\n' +
+          '// Keep `node bin/say-server.js` running in a terminal while you present.';
+        sayConfigEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    </script>
+  </body>
+</html>

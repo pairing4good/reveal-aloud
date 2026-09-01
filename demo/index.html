@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>reveal-aloud — demo deck</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/theme/white.css" />
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <!-- ================================================================
+             Every slide below shows its own speaker notes on screen:
+             struck-through grey = silent, and "You should hear" is generated
+             by the plugin itself, so the slide can never disagree with the voice.
+             ================================================================ -->
+
+        <section>
+          <h2>reveal-aloud</h2>
+          <p class="lead">Your speaker notes, read out loud.</p>
+          <p class="big-key">Press <kbd>R</kbd> to start</p>
+          <p class="hint">
+            Then use <kbd>→</kbd> and <kbd>←</kbd> as usual. Every slide shows what the
+            narrator will say and what it will skip. Press <kbd>R</kbd> again to stop.
+          </p>
+          <aside class="notes">
+            Welcome to the reveal aloud demo. [smile, wait for them to settle]
+            Use the arrow keys to move through the deck. Each slide shows you what I am about to say.
+          </aside>
+        </section>
+
+        <section>
+          <h2>1. Plain notes</h2>
+          <p class="lead">Nothing special: the notes are read from top to bottom.</p>
+          <aside class="notes">
+            This slide has ordinary speaker notes. Every sentence here is read aloud, in order,
+            and the narrator stops when it reaches the end.
+          </aside>
+        </section>
+
+        <section>
+          <h2>2. Stage directions in <code>[brackets]</code></h2>
+          <p class="lead">
+            Anything between <code>[</code> and <code>]</code> is for you, not the audience.
+          </p>
+          <aside class="notes">
+            Here is the headline number. [click to reveal the chart] It went up by forty percent
+            last quarter. [pause for effect] That is the whole story.
+          </aside>
+        </section>
+
+        <section>
+          <h2>3. A note that is only a stage direction</h2>
+          <p class="lead">The narrator stays completely silent. This is not a bug.</p>
+          <aside class="notes">[hand out the worksheets and wait for everyone to have one]</aside>
+        </section>
+
+        <section>
+          <h2>4. No speaker notes at all</h2>
+          <p class="lead">
+            Silence again — and narration stays <em>on</em>, so the next slide still reads.
+          </p>
+        </section>
+
+        <section>
+          <h2>5. Notes come back</h2>
+          <p class="lead">Proof that a silent slide does not switch the narrator off.</p>
+          <aside class="notes">
+            Notes are back, and you did not have to press anything. A slide with no notes is just
+            a quiet slide.
+          </aside>
+        </section>
+
+        <section>
+          <h2>6. Brackets inside brackets</h2>
+          <p class="lead">A nested stage direction is silent all the way through.</p>
+          <aside class="notes">
+            Let us look at the results. [if the demo fails [use the backup video] and carry on]
+            The numbers speak for themselves.
+          </aside>
+        </section>
+
+        <section>
+          <h2>7. A stage direction across several lines</h2>
+          <p class="lead">Brackets may wrap. The silence wraps with them.</p>
+          <aside class="notes">
+            First, the problem.
+            [switch to the terminal,
+             run the failing test,
+             then come back to the slides]
+            And that is why we changed the design.
+          </aside>
+        </section>
+
+        <section>
+          <h2>8. Saying a bracket out loud</h2>
+          <p class="lead">
+            Escape it with a backslash: <code>\[</code> and <code>\]</code>.
+          </p>
+          <aside class="notes">
+            The syntax is \[optional\] in square brackets. [point at the screen] Everyone gets that
+            wrong the first time.
+          </aside>
+        </section>
+
+        <section>
+          <h2>9. A bracket you forgot to close</h2>
+          <p class="lead">
+            Everything after it goes silent — so the badge in the corner warns you.
+          </p>
+          <aside class="notes">
+            This first sentence is read normally. [and then I forgot to close this bracket
+            so none of this will ever be spoken.
+          </aside>
+        </section>
+
+        <section data-notes="These notes live in a data-notes attribute on the section instead of an aside element. [both work exactly the same way] The narrator does not care which you use.">
+          <h2>10. Notes in a <code>data-notes</code> attribute</h2>
+          <p class="lead">reveal.js supports both. So does reveal-aloud.</p>
+        </section>
+
+        <section>
+          <section>
+            <h2>11. Vertical slides</h2>
+            <p class="lead">Press <kbd>↓</kbd>. Each slide in the stack has its own notes.</p>
+            <aside class="notes">
+              This is the top of a vertical stack. Press the down arrow to go deeper, and the
+              narrator follows you down.
+            </aside>
+          </section>
+          <section>
+            <h2>11a. Down one</h2>
+            <p class="lead">Only this slide's notes are read — not its neighbours'.</p>
+            <aside class="notes">
+              You are one level down now. Only these notes are read here, never the ones from the
+              slide above or below.
+            </aside>
+          </section>
+        </section>
+
+        <section>
+          <h2>12. Code in your notes</h2>
+          <p class="lead">
+            <code>&lt;code&gt;</code> and <code>&lt;pre&gt;</code> are skipped by default —
+            symbols read badly out loud. Set <code>speakCode: true</code> if you want them.
+          </p>
+          <aside class="notes">
+            <p>Run the installer while you are talking.</p>
+            <pre><code>npm install reveal-aloud --save-dev</code></pre>
+            <p>Then carry on to the next section.</p>
+          </aside>
+        </section>
+
+        <section>
+          <h2>13. A long note</h2>
+          <p class="lead">
+            Split into short utterances, because Chrome silently truncates long ones.
+            Advance early and it stops mid-sentence — try it.
+          </p>
+          <aside class="notes">
+            <p>
+              This note is deliberately long. Chrome cuts off any single utterance after about
+              fifteen seconds, which would leave a note like this one stopping halfway through
+              with no error and no explanation.
+            </p>
+            <p>
+              So the note is broken into sentences before it ever reaches the browser. Each
+              sentence is spoken on its own, which also gives the narrator somewhere natural to
+              breathe, and gives you a clean place to interrupt.
+            </p>
+            <p>
+              Try pressing the right arrow key right now, in the middle of this sentence. The
+              narrator stops immediately and starts reading the next slide instead. Try going
+              backwards too — it works exactly the same way.
+            </p>
+          </aside>
+        </section>
+
+        <section>
+          <h2>14. Tidying up after a bracket</h2>
+          <p class="lead">
+            Removing a stage direction can strand a comma or leave a double space.
+            Those are cleaned up so the voice does not stumble.
+          </p>
+          <aside class="notes">
+            Good morning [check the clock — is it still morning?], everyone. Thanks for coming.
+          </aside>
+        </section>
+
+        <section>
+          <h2>15. Paragraphs and bullets</h2>
+          <p class="lead">Each block becomes its own utterance, so the narrator pauses between them.</p>
+          <aside class="notes">
+            <p>There are three things to remember.</p>
+            <ul>
+              <li>Brackets are silent.</li>
+              <li>Empty notes are silent.</li>
+              <li>Everything else gets read.</li>
+            </ul>
+          </aside>
+        </section>
+
+        <section>
+          <h2>That's the whole thing</h2>
+          <pre class="config"><code>&lt;script src="reveal-aloud.js"&gt;&lt;/script&gt;
+
+Reveal.initialize({
+  plugins: [ RevealAloud ],
+  aloud: { voice: 'Samantha', rate: 1.0 }
+});</code></pre>
+          <p class="hint">
+            <kbd>R</kbd> toggles narration &nbsp;·&nbsp; <kbd>?</kbd> shows every shortcut
+            &nbsp;·&nbsp; <a href="voices.html">voices.html</a> lets you hear every voice you
+            have and copy the config for it
+          </p>
+          <aside class="notes">
+            That is the whole plugin. Two lines to install, one key to use, and square brackets
+            for anything you do not want said out loud. [thank them and take questions]
+          </aside>
+        </section>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js"></script>
+    <script src="../dist/reveal-aloud.js"></script>
+    <script src="demo.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: true,
+        // Top-aligned: every slide carries a notes panel, so there is a lot to fit.
+        center: false,
+        width: 1100,
+        margin: 0.05,
+        plugins: [RevealNotes, RevealAloud],
+        aloud: {
+          // Samantha ships with every Mac. To use a different one, run
+          // RevealAloud.listVoices() in the browser console and copy a name from that list —
+          // it is the only list that counts. Note that macOS Siri voices appear in System
+          // Settings but are reserved by Apple and never reach a browser, so naming one here
+          // silently falls back to another voice.
+          voice: 'Samantha',
+          rate: 1.0
+        }
+      });
+
+      // Prints "what will be said" and "what stays silent" onto each slide.
+      Reveal.on('ready', () => annotateDeck(Reveal));
+    </script>
+  </body>
+</html>
