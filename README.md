@@ -42,10 +42,6 @@ install and nothing to sign up for.
 and an unpinned URL follows the latest release — so a deck you handed to someone months ago
 could quietly start loading different code. `@v0.1.0` is the version you tested against; say so.
 
-> *Pre-release note: the URL above goes live the moment the first version tag is pushed. Until
-> then, clone the repo and point at your local `dist/reveal-aloud.js`. Delete this note after
-> the first release.*
-
 <details>
 <summary>From npm (once published)</summary>
 
@@ -405,7 +401,7 @@ and pushes both, which makes two things happen:
 directly, and `dist/` is committed, so the tag alone is enough:
 
 ```
-https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v1.2.0/dist/reveal-aloud.js
+https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.0/dist/reveal-aloud.js
 ```
 
 **The tag triggers `release.yml`**, which re-runs lint, build, the dist-drift check, the unit
@@ -413,7 +409,7 @@ suite and the end-to-end suite, refuses to continue if the tag and `package.json
 disagree, then runs `npm publish --provenance`. Once that succeeds the npm CDN path works too:
 
 ```
-https://cdn.jsdelivr.net/npm/reveal-aloud@1.2.0/dist/reveal-aloud.js
+https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.0/dist/reveal-aloud.js
 ```
 
 Nothing is ever published *to* jsDelivr — it mirrors npm and GitHub on demand, with no account
