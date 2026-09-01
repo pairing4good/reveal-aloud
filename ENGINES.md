@@ -26,32 +26,41 @@ ready-to-paste config for whichever you pick.
 
 ## How to switch
 
-Change one key. Everything else in your `aloud` config stays as it is.
+Open your deck's HTML file and find the `Reveal.initialize(...)` call. In `demo/index.html` that
+is near the bottom of the file. Change the `engine` key (and optionally `voice`) inside the
+`aloud` block:
 
 ```js
 Reveal.initialize({
   plugins: [ RevealAloud ],
   aloud: {
-    engine: 'webspeech'   // or 'kokoro', or 'say'
+    engine: 'webspeech',   // ← change this to 'kokoro' or 'say'
+    voice: 'Samantha',
+    rate: 1.0
   }
 });
 ```
 
-Leaving `engine` out at all is the same as `'webspeech'` — that's the default, and it's what
-`demo/index.html` currently ships with.
+The `demo/index.html` file ships with all three engines shown as commented examples — uncomment
+the one you want and comment out the others. Leaving `engine` out entirely defaults to
+`'webspeech'`.
 
 ### `webspeech` — the default
 
-No setup. Uses whatever voices your browser reports.
+No setup. Uses whatever voices your browser can see.
 
 ```js
-aloud: { voice: 'Samantha', rate: 1.0 }
+aloud: { engine: 'webspeech', voice: 'Samantha', rate: 1.0 }
 ```
 
-- `voice` names are whatever `RevealAloud.listVoices()` reports — **not** what System Settings
-  shows. See [README §7](README.md#7-better-system-voices-mac-free-worth-it) for why those two
-  lists disagree, and for downloading better free system voices.
-- Siri voices can never be reached this way — see `say` below.
+**Finding available voices:**
+- Open **`demo/voices.html`** (`npm run demo`, then click the link) — it plays every voice
+  your browser reports and shows the exact name to paste in.
+- Or run `RevealAloud.listVoices()` in the browser console and copy a name from the list.
+- The names that work here are **not** the same as what System Settings shows — `listVoices()`
+  is the only list that counts.
+- Siri voices appear in System Settings but are reserved by Apple and cannot be reached from
+  a browser. Use `say` (below) to reach them.
 
 ### `kokoro` — free, high quality, runs in the browser
 
@@ -61,14 +70,27 @@ No setup, but the first use downloads an ~90 MB model (cached afterward).
 aloud: { engine: 'kokoro', voice: 'af_heart', rate: 1.0 }
 ```
 
-- Voice names are Kokoro's own ids (`af_heart`, `am_adam`, `bf_emma`, …), not your OS's.
-- The deck must be **served**, not opened as a `file://` page, since fetching the model needs a
-  real origin. `npm run demo` already does this.
-- Full details: [README §5](README.md#5-if-the-built-in-voices-sound-too-robotic-kokoro).
+**Available voices** (name the `af_`/`am_`/`bf_`/`bm_` id exactly as shown):
+
+| Accent | Gender | Voice IDs |
+|---|---|---|
+| American | Female | `af_heart` ★ `af_bella` `af_nicole` `af_aoede` `af_kore` `af_sarah` `af_nova` `af_sky` `af_alloy` `af_jessica` `af_river` |
+| American | Male | `am_adam` `am_echo` `am_eric` `am_fenrir` `am_liam` `am_michael` `am_onyx` `am_puck` |
+| British | Female | `bf_alice` `bf_emma` `bf_isabella` `bf_lily` |
+| British | Male | `bm_daniel` `bm_fable` `bm_george` `bm_lewis` |
+
+★ = default when no `voice` is set.
+
+Open **`demo/voices.html`** → kokoro tab to hear all of them before you decide.
+
+The deck must be **served**, not opened as a `file://` page, since fetching the model needs a
+real origin. `npm run demo` already does this.
+
+Full details: [README §5](README.md#5-if-the-built-in-voices-sound-too-robotic-kokoro).
 
 ### `say` — your own downloaded voices, Siri included
 
-**Setup required:** a local helper must be running before you press <kbd>R</kbd>.
+**Setup required:** start the helper server before you press <kbd>R</kbd>.
 
 ```bash
 node bin/say-server.js
@@ -77,21 +99,26 @@ node bin/say-server.js
 Leave that running in its own terminal for the whole time you're presenting. Then:
 
 ```js
-aloud: { engine: 'say' }   // no `voice` set → uses your current System Voice, Siri included
+// Uses your current System Voice (Siri included):
+aloud: { engine: 'say', rate: 1.0 }
+
+// Uses a specific installed voice:
+aloud: { engine: 'say', voice: 'Ava', rate: 1.0 }   // partial names work
 ```
 
-To use a specific installed voice instead of your System Voice default:
+**Finding available voices:**
+- Run `say -v '?'` in Terminal — it lists every voice installed on your Mac with its locale.
+- Or open **`demo/voices.html`** → say tab to hear them through the helper.
+- Omit `voice` entirely to use whatever is set as your System Voice in
+  **System Settings → Accessibility → Spoken Content**.
 
-```js
-aloud: { engine: 'say', voice: 'Ava' }   // matches "Ava (Premium)"; partial names work
-```
+**Mac only.** The helper shells out to the macOS `say` command; it has nothing to run on
+Windows or Linux.
 
-- **Mac only.** The helper shells out to the macOS `say` command; it has nothing to run on
-  Windows or Linux.
-- If you forget to start the helper, the on-screen badge says so — `speak()` fails clearly
-  rather than hanging silently.
-- Full details, including exactly why Siri voices need this and can't be reached any other
-  way: [README §6](README.md#6-or-your-own-downloaded-voices-via-say).
+If you forget to start the helper, the on-screen badge says so — narration fails clearly rather
+than hanging silently.
+
+Full details, including why Siri voices need this path: [README §6](README.md#6-or-your-own-downloaded-voices-via-say).
 
 ## Setup checklist before you present
 
