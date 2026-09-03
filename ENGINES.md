@@ -19,6 +19,7 @@ This page is the side-by-side version. Each engine also has its own full section
 | **Voice quality** | Whatever your OS ships | Consistently good | Whatever you've installed |
 | **Reaches a Siri voice** | No — impossible from a browser | No | **Yes**, if that's your System Voice |
 | **Works offline** | Yes | Yes, after the first load | Yes |
+| **[Export to audio files](README.md#8-export-the-narration-as-audio-files)** | **No** — browsers expose no way to capture speech to a file | Yes, on any platform | Yes, on macOS |
 
 If you haven't looked at any of this yet, start with **`demo/voices.html`**
 (`npm run demo`, then open it) — it lets you hear all three before you decide, with a
@@ -70,18 +71,37 @@ No setup, but the first use downloads an ~90 MB model (cached afterward).
 aloud: { engine: 'kokoro', voice: 'af_heart', rate: 1.0 }
 ```
 
-**Available voices** (name the `af_`/`am_`/`bf_`/`bm_` id exactly as shown):
+**Available voices.** All 28 are English, and they are graded by the model's own authors. The
+grades are not a formality — the gap between `af_heart` and `am_adam` is the difference between
+"this is fine" and "nobody will listen to this". Name the id exactly as shown.
 
-| Accent | Gender | Voice IDs |
-|---|---|---|
-| American | Female | `af_heart` ★ `af_bella` `af_nicole` `af_aoede` `af_kore` `af_sarah` `af_nova` `af_sky` `af_alloy` `af_jessica` `af_river` |
-| American | Male | `am_adam` `am_echo` `am_eric` `am_fenrir` `am_liam` `am_michael` `am_onyx` `am_puck` |
-| British | Female | `bf_alice` `bf_emma` `bf_isabella` `bf_lily` |
-| British | Male | `bm_daniel` `bm_fable` `bm_george` `bm_lewis` |
+| Grade | Voice IDs |
+|---|---|
+| **A** | `af_heart` ★ |
+| **A-** | `af_bella` |
+| **B-** | `af_nicole` `bf_emma` |
+| C+ | `af_aoede` `af_kore` `af_sarah` · `am_fenrir` `am_michael` `am_puck` |
+| C | `af_alloy` `af_nova` `bf_isabella` · `bm_fable` `bm_george` |
+| C- / D+ | `af_sky` · `bm_lewis` |
+| D | `af_jessica` `af_river` `am_echo` `am_eric` `am_liam` `am_onyx` `bf_alice` `bf_lily` `bm_daniel` |
+| D- / F+ | `am_santa` · `am_adam` |
 
 ★ = default when no `voice` is set.
 
-Open **`demo/voices.html`** → kokoro tab to hear all of them before you decide.
+In practice: use **`af_heart`** unless you have a reason not to, then `af_bella`. If you need a
+male voice, `am_fenrir`/`am_michael`/`am_puck` at C+ are the ceiling — there is nothing better.
+British: `bf_emma` is the only one above C.
+
+The HuggingFace repo also contains Japanese, Chinese, Spanish, Hindi, Italian, Portuguese and
+French voice files, but **`kokoro-js` cannot load any of them** — it validates against the 28
+above and throws on anything else. `jf_alpha` and friends will not work.
+
+Open **`demo/voices.html`** → kokoro tab to hear all of them before you decide, or list them with
+grades from the terminal:
+
+```bash
+npx reveal-aloud-export --list-voices kokoro
+```
 
 The deck must be **served**, not opened as a `file://` page, since fetching the model needs a
 real origin. `npm run demo` already does this.
@@ -132,7 +152,9 @@ Whichever engine you pick, do this once beforehand, not for the first time on st
 - [ ] **`say`** — start `node bin/say-server.js` in a terminal you can leave running, and
       confirm the voice you want is really the one that plays (`demo/voices.html`'s "say"
       section is the fastest way to check). Remember: audio comes out your Mac's speakers
-      directly, not through the browser tab — capture system audio if you're screen recording.
+      directly, not through the browser tab — capture system audio if you're screen recording,
+      or [export the narration to files](README.md#8-export-the-narration-as-audio-files) and
+      skip recording it at all.
 
 ## Still deciding?
 

@@ -3,3 +3,6 @@ coverage/
 .DS_Store
 *.log
 _site/
+
+# Exported narration audio (reveal-aloud-export)
+narration/

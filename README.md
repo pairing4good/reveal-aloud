@@ -219,7 +219,9 @@ aloud: { engine: 'say', voice: 'Ava' }   // matches "Ava (Premium)"; partial nam
   outside your own machine can ever reach it.
 - Speech comes out of **your Mac's speakers directly**, not through the browser tab — so this
   is the one engine where muting the browser tab does not silence it. If you are recording your
-  screen, make sure your system audio, not just the tab, is captured.
+  screen, either capture system audio rather than just the tab, or skip recording the narration
+  altogether and [export it to audio files](#8-export-the-narration-as-audio-files) instead,
+  which is easier to edit and sounds better.
 - Everything else — <kbd>R</kbd>, brackets, stopping mid-sentence, all of it — works exactly the
   same as the other two engines.
 
@@ -262,6 +264,104 @@ than during.
 Tried a Premium voice and it still sounds robotic? That's real — some machines simply don't have
 a good one available to a browser, and no amount of downloading changes that. Section 5 above is
 the actual fix in that case.
+
+## 8. Export the narration as audio files
+
+Recording a talk usually means screen-recording the deck and then wrestling the audio into the
+video. reveal-aloud can skip the recording entirely and *render* the narration straight to files:
+
+```bash
+npx reveal-aloud-export deck.html --engine kokoro --voice af_heart
+```
+
+```
+narration/
+  001-h00-v00.wav … 018-h16-v00.wav   one per slide, in presentation order
+  manifest.json                        durations, timeline offsets, spoken text, warnings
+  narration.csv                        the same, for spreadsheets and marker importers
+  narration-full.wav                   every clip in one track, 0.5s between slides
+```
+
+This is better than recording the playback, not just easier. It is lossless, it is repeatable
+when you change a note, and it runs about four times faster than the talk itself. With the `say`
+engine it is also the *only* way to capture the audio cleanly, since that engine never plays
+through the browser tab at all.
+
+**Web Speech API decks cannot be exported.** Browsers offer no way to capture synthesized speech
+to a file — only to play it. Use `--engine say` or `--engine kokoro`.
+
+### Picking a voice
+
+Both engines list what they have, with no download required:
+
+```bash
+npx reveal-aloud-export --list-voices kokoro   # 28 voices, sorted best-graded first
+npx reveal-aloud-export --list-voices say      # what is installed on this Mac
+```
+
+Kokoro's voices are graded by the model's authors and they are *not* interchangeable — `af_heart`
+(A) and `af_bella` (A-) are the only two that are genuinely good, and no male voice is rated
+above C+. For `say`, the Premium and Enhanced voices from section 7 are the ones worth using.
+
+Audition one before committing to a full render:
+
+```bash
+npx reveal-aloud-export --sample --engine kokoro --voice af_bella
+afplay voice-sample.wav
+```
+
+### Lining it up with a screen recording
+
+`manifest.json` is the part that does the work:
+
+| Field | What it is for |
+|---|---|
+| `startSec` | Where the clip sits in `narration-full.wav`. Drop the master on the timeline and every slide change is at a known second. |
+| `durationSec` | How long the clip runs. |
+| `speechStartSec` / `speechEndSec` | Where the *speech* starts and stops inside the clip. |
+| `totals.timelineSec` | Total length, so you know what you are aiming at before you record. |
+| `warnings` | Slides with an unclosed `[`, no notes, or a failed render. |
+
+Those last two columns matter more than they look. Speech synthesisers pad their own output —
+macOS `say` adds roughly 700ms of silence after the last word even when asked for none — so
+`speechEndSec` is where to trim rather than something to find by ear.
+
+**Nothing is padded by default.** The live `say` engine adds silence at both ends to stop an idle
+audio device clipping the first and last word, but rendering to a file opens no device, so that
+padding would only leave you trimming every clip. `--lead` and `--tail` are there if you want it.
+
+### Useful flags
+
+```bash
+--dry-run                 # extract the notes and write the manifest, render nothing
+--slides 3-7,12           # re-render just these; the rest are reused, manifest stays whole
+--gap 1.0                 # more breathing room between slides in the master
+--rate 0.9                # slow it down
+--no-concat               # skip the master track
+```
+
+`--dry-run` first is worth the ten seconds: it tells you how many slides actually have narration
+and roughly how long the talk runs, which catches a deck whose notes never made it into the page.
+
+### What it costs
+
+`say` needs nothing beyond macOS. Kokoro needs a one-time install and model download, and is
+only pulled in if you use it:
+
+```bash
+npm i -D kokoro-js       # ~400MB of node_modules (onnxruntime + transformers.js)
+```
+
+The first Kokoro render also downloads the model — 310MB at the default `--dtype fp32`, which is
+the highest quality it offers. It is cached in `~/.cache/reveal-aloud/models` and reused
+afterwards. Pass `--dtype q8` for an 88MB download that is very nearly as good.
+
+Reading the deck needs a real browser, so that the exported audio matches exactly what the deck
+speaks — including decks built from markdown or assembled by a script:
+
+```bash
+npm i -D playwright && npx playwright install chromium
+```
 
 ## Try it
 

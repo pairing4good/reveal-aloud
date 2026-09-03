@@ -324,15 +324,43 @@
       const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 
       /** English voices, so something plays even before the full list has loaded. */
-      const KOKORO_VOICE_HINTS = {
-        af_heart: 'warm, American — the model’s own default',
-        af_bella: 'elegant, American',
-        af_nicole: 'calm, American',
-        am_adam: 'youthful, American',
-        am_michael: 'steady, American',
-        bf_emma: 'British',
-        bm_george: 'British'
-      };
+      /**
+       * All 28 voices kokoro-js ships, with the grades the model's own authors publish, best
+       * first. The grades matter: only the top two are genuinely good, and `am_adam` at F+ is
+       * unusable — so showing the roster without them invites a bad choice.
+       */
+      const KOKORO_VOICES = [
+        ['af_heart', 'A', 'en-US', 'warm — the model’s own default, and the only A'],
+        ['af_bella', 'A-', 'en-US', 'elegant'],
+        ['af_nicole', 'B-', 'en-US', 'calm'],
+        ['bf_emma', 'B-', 'en-GB', 'the best British voice'],
+        ['af_aoede', 'C+', 'en-US', ''],
+        ['af_kore', 'C+', 'en-US', ''],
+        ['af_sarah', 'C+', 'en-US', ''],
+        ['am_fenrir', 'C+', 'en-US', 'no male voice is rated higher'],
+        ['am_michael', 'C+', 'en-US', ''],
+        ['am_puck', 'C+', 'en-US', ''],
+        ['af_alloy', 'C', 'en-US', ''],
+        ['af_nova', 'C', 'en-US', ''],
+        ['bf_isabella', 'C', 'en-GB', ''],
+        ['bm_fable', 'C', 'en-GB', ''],
+        ['bm_george', 'C', 'en-GB', ''],
+        ['af_sky', 'C-', 'en-US', ''],
+        ['bm_lewis', 'D+', 'en-GB', ''],
+        ['af_jessica', 'D', 'en-US', ''],
+        ['af_river', 'D', 'en-US', ''],
+        ['am_echo', 'D', 'en-US', ''],
+        ['am_eric', 'D', 'en-US', ''],
+        ['am_liam', 'D', 'en-US', ''],
+        ['am_onyx', 'D', 'en-US', ''],
+        ['bf_alice', 'D', 'en-GB', ''],
+        ['bf_lily', 'D', 'en-GB', ''],
+        ['bm_daniel', 'D', 'en-GB', ''],
+        ['am_santa', 'D-', 'en-US', ''],
+        ['am_adam', 'F+', 'en-US', 'not recommended']
+      ].map(([name, grade, lang, hint]) => ({ name, grade, lang, hint }));
+
+      const KOKORO_BY_NAME = new Map(KOKORO_VOICES.map((voice) => [voice.name, voice]));
 
       const kokoroIdle = document.getElementById('kokoroIdle');
       const kokoroLoading = document.getElementById('kokoroLoading');
@@ -381,30 +409,36 @@
       }
 
       function renderKokoroVoices() {
-        const names =
-          typeof kokoroTts.list_voices === 'function'
-            ? kokoroTts.list_voices()
-            : Object.keys(KOKORO_VOICE_HINTS);
+        // Deliberately NOT kokoroTts.list_voices() — that method console.tables the roster and
+        // returns undefined, so anything reading its result silently gets nothing. The `voices`
+        // getter is the data. Either way our own table supplies the grades and the order.
+        const ids = new Set(kokoroTts?.voices ? Object.keys(kokoroTts.voices) : []);
+        // Filter our roster rather than mapping the model's keys, so the order stays
+        // best-graded-first instead of whatever order the model happens to list them in.
+        const available = KOKORO_VOICES.filter((voice) => ids.has(voice.name));
+        const voices = available.length > 0 ? available : KOKORO_VOICES;
 
         const table = document.createElement('table');
-        for (const name of names) table.appendChild(kokoroRowFor(name));
+        for (const voice of voices) table.appendChild(kokoroRowFor(voice.name));
         kokoroListEl.innerHTML = '';
         kokoroListEl.appendChild(table);
       }
 
       function kokoroRowFor(name) {
         const row = document.createElement('tr');
-        const hint = KOKORO_VOICE_HINTS[name];
-        if (hint) row.className = 'notable';
+        const voice = KOKORO_BY_NAME.get(name) ?? { grade: '', lang: '', hint: '' };
+        // Highlight only the ones actually worth using.
+        if (voice.grade === 'A' || voice.grade === 'A-') row.className = 'notable';
 
         const nameCell = document.createElement('td');
         nameCell.className = 'name';
         nameCell.textContent = name;
-        if (hint) nameCell.appendChild(tag(hint));
+        if (voice.grade) nameCell.appendChild(tag(voice.grade));
+        if (voice.hint) nameCell.appendChild(tag(voice.hint));
 
         const langCell = document.createElement('td');
         langCell.className = 'lang';
-        langCell.textContent = name.startsWith('b') ? 'en-GB' : name.startsWith('a') ? 'en-US' : '';
+        langCell.textContent = voice.lang;
 
         const actions = document.createElement('td');
         actions.className = 'actions';

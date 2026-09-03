@@ -429,38 +429,58 @@ function isExpectedInterruption(event) {
   return (event == null ? void 0 : event.error) === "interrupted" || (event == null ? void 0 : event.error) === "canceled";
 }
 
+// src/core/kokoro-voices.js
+var ROSTER = [
+  ["af_heart", "en-US", "Female", "A", "A", "\u2764\uFE0F"],
+  ["af_bella", "en-US", "Female", "A", "A-", "\u{1F525}"],
+  ["af_nicole", "en-US", "Female", "B", "B-", "\u{1F3A7}"],
+  ["bf_emma", "en-GB", "Female", "B", "B-", ""],
+  ["af_aoede", "en-US", "Female", "B", "C+", ""],
+  ["af_kore", "en-US", "Female", "B", "C+", ""],
+  ["af_sarah", "en-US", "Female", "B", "C+", ""],
+  ["am_fenrir", "en-US", "Male", "B", "C+", ""],
+  ["am_michael", "en-US", "Male", "B", "C+", ""],
+  ["am_puck", "en-US", "Male", "B", "C+", ""],
+  ["af_alloy", "en-US", "Female", "B", "C", ""],
+  ["af_nova", "en-US", "Female", "B", "C", ""],
+  ["bf_isabella", "en-GB", "Female", "B", "C", ""],
+  ["bm_fable", "en-GB", "Male", "B", "C", ""],
+  ["bm_george", "en-GB", "Male", "B", "C", ""],
+  ["af_sky", "en-US", "Female", "B", "C-", ""],
+  ["bm_lewis", "en-GB", "Male", "C", "D+", ""],
+  ["af_jessica", "en-US", "Female", "C", "D", ""],
+  ["af_river", "en-US", "Female", "C", "D", ""],
+  ["am_echo", "en-US", "Male", "C", "D", ""],
+  ["am_eric", "en-US", "Male", "C", "D", ""],
+  ["am_liam", "en-US", "Male", "C", "D", ""],
+  ["am_onyx", "en-US", "Male", "C", "D", ""],
+  ["bf_alice", "en-GB", "Female", "C", "D", ""],
+  ["bf_lily", "en-GB", "Female", "C", "D", ""],
+  ["bm_daniel", "en-GB", "Male", "C", "D", ""],
+  ["am_santa", "en-US", "Male", "C", "D-", "\u{1F385}"],
+  ["am_adam", "en-US", "Male", "D", "F+", ""]
+];
+var DEFAULT_KOKORO_VOICE = "af_heart";
+var KOKORO_VOICES = Object.freeze(
+  ROSTER.map(
+    ([name, lang, gender, targetQuality, overallGrade, traits]) => Object.freeze({
+      name,
+      lang,
+      gender,
+      targetQuality,
+      overallGrade,
+      traits,
+      default: name === DEFAULT_KOKORO_VOICE
+    })
+  )
+);
+function kokoroVoice(name) {
+  return KOKORO_VOICES.find((voice) => voice.name === name);
+}
+
 // src/adapters/kokoro-speech.js
 var DEFAULT_MODULE_URL = "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
 var DEFAULT_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
-var KNOWN_VOICES = [
-  ["af_heart", "en-US"],
-  ["af_bella", "en-US"],
-  ["af_nicole", "en-US"],
-  ["af_aoede", "en-US"],
-  ["af_kore", "en-US"],
-  ["af_sarah", "en-US"],
-  ["af_nova", "en-US"],
-  ["af_sky", "en-US"],
-  ["af_alloy", "en-US"],
-  ["af_jessica", "en-US"],
-  ["af_river", "en-US"],
-  ["am_adam", "en-US"],
-  ["am_echo", "en-US"],
-  ["am_eric", "en-US"],
-  ["am_fenrir", "en-US"],
-  ["am_liam", "en-US"],
-  ["am_michael", "en-US"],
-  ["am_onyx", "en-US"],
-  ["am_puck", "en-US"],
-  ["bf_alice", "en-GB"],
-  ["bf_emma", "en-GB"],
-  ["bf_isabella", "en-GB"],
-  ["bf_lily", "en-GB"],
-  ["bm_daniel", "en-GB"],
-  ["bm_fable", "en-GB"],
-  ["bm_george", "en-GB"],
-  ["bm_lewis", "en-GB"]
-].map(([name, lang]) => ({ name, lang, default: name === "af_heart" }));
 function createKokoroSpeech(options = {}) {
   const {
     moduleUrl = DEFAULT_MODULE_URL,
@@ -492,12 +512,8 @@ function createKokoroSpeech(options = {}) {
         }
       })
     ).then((tts) => {
-      if (typeof tts.list_voices === "function") {
-        const names = tts.list_voices();
-        if (Array.isArray(names) && names.length > 0) {
-          liveVoices = names.map((name) => voiceMetaFor(name));
-        }
-      }
+      const ids = (tts == null ? void 0 : tts.voices) ? Object.keys(tts.voices) : [];
+      if (ids.length > 0) liveVoices = ids.map((name) => voiceMetaFor(name, tts.voices[name]));
       return tts;
     });
     return modelPromise;
@@ -571,7 +587,7 @@ function createKokoroSpeech(options = {}) {
     }
   }
   function listVoices2() {
-    return liveVoices != null ? liveVoices : KNOWN_VOICES;
+    return liveVoices != null ? liveVoices : KOKORO_VOICES;
   }
   function resolveVoice(settings = {}) {
     return pickVoice(listVoices2(), { name: settings.voice, lang: settings.lang });
@@ -590,17 +606,31 @@ function createKokoroSpeech(options = {}) {
     preload: loadModel
   };
 }
-function voiceMetaFor(name) {
-  const known = KNOWN_VOICES.find((v) => v.name === name);
+function voiceMetaFor(name, meta) {
+  var _a;
+  const known = kokoroVoice(name);
   if (known) return known;
-  const lang = { a: "en-US", b: "en-GB", j: "ja-JP", z: "zh-CN", e: "es-ES", f: "fr-FR", h: "hi-IN", i: "it-IT", p: "pt-BR" }[name[0]];
-  return { name, lang };
+  const lang = (_a = { a: "en-US", b: "en-GB", j: "ja-JP", z: "zh-CN", e: "es-ES", f: "fr-FR", h: "hi-IN", i: "it-IT", p: "pt-BR" }[name[0]]) != null ? _a : meta == null ? void 0 : meta.language;
+  return { name, lang, gender: meta == null ? void 0 : meta.gender, overallGrade: meta == null ? void 0 : meta.overallGrade };
 }
 function describeError(error, fallback2) {
   return error instanceof Error ? error.message : fallback2;
 }
 function isKokoroSupported(scope = globalThis) {
   return typeof scope.WebAssembly === "object" && typeof scope.Audio === "function";
+}
+
+// src/core/say-format.js
+function joinForSay(chunks, options = {}) {
+  if (!Array.isArray(chunks) || chunks.length === 0) return "";
+  const lead = silence(options.leadSilenceMs);
+  const gap = silence(options.gapSilenceMs);
+  const tail = silence(options.tailSilenceMs);
+  return `[[slnc ${lead}]] ` + chunks.join(` [[slnc ${gap}]] `) + ` [[slnc ${tail}]]`;
+}
+function silence(ms) {
+  const value = Math.round(Number(ms));
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 // src/adapters/say-speech.js
@@ -636,7 +666,7 @@ function createSaySpeech(options = {}) {
     }
     const { voice } = resolveVoice(settings);
     const voiceName = voice ? voice.name : "";
-    const joined = `[[slnc ${leadSilenceMs}]] ` + chunks.join(` [[slnc ${gapSilenceMs}]] `) + ` [[slnc ${tailSilenceMs}]]`;
+    const joined = joinForSay(chunks, { leadSilenceMs, gapSilenceMs, tailSilenceMs });
     abortController = new AbortController();
     let response;
     try {

@@ -18,15 +18,16 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 
+import { toWordsPerMinute } from '../src/core/say-format.js';
+import {
+  SYSTEM_DEFAULT_VOICE,
+  isNamedVoice,
+  parseVoiceList,
+  toVoiceCatalog
+} from '../src/core/say-voices.js';
+
 const PORT = Number(process.env.PORT || 5757);
 const SAY_BIN = process.env.SAY_BIN || 'say';
-
-/**
- * The id a presenter's config means by "use whatever my Mac is currently set to speak with" —
- * the only way to reach a Siri voice, since `say -v` rejects Siri voices by name outright but
- * silently honours one set as the System Voice when no `-v` is given at all.
- */
-const SYSTEM_DEFAULT_VOICE = 'system-default';
 
 let current = null;
 
@@ -40,35 +41,17 @@ function listVoices() {
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) return reject(new Error(err.trim() || `say -v ? exited with code ${code}`));
-      resolve(parseVoiceList(out));
+      resolve(toVoiceCatalog(out));
     });
   });
-}
-
-/**
- * `say -v ?` prints one voice per line as `Name    lang_TAG   # sample text`. Names may contain
- * spaces, so the language tag — always a bare `xx_YY` token — is what anchors the split.
- */
-function parseVoiceList(output) {
-  const voices = [];
-  for (const line of output.split('\n')) {
-    const match = line.match(/^(.+?)\s+([a-z]{2}(?:_|-)[A-Za-z]{2,})\b/);
-    if (!match) continue;
-    voices.push({ name: match[1].trim(), lang: match[2].replace('_', '-') });
-  }
-  // First and marked default, so an unconfigured `voice` setting resolves here via the same
-  // pickVoice() fallback the other engines use — which is exactly the "just use whatever I
-  // already picked in System Settings" behaviour a Siri voice needs.
-  return [{ name: SYSTEM_DEFAULT_VOICE, lang: '', default: true }, ...voices];
 }
 
 function speak(text, voice, rate) {
   return new Promise((resolve, reject) => {
     if (current) current.kill(); // never let two utterances overlap, even across requests
 
-    const wordsPerMinute = Math.max(60, Math.round(175 * (Number(rate) > 0 ? Number(rate) : 1)));
-    const args = ['-r', String(wordsPerMinute)];
-    if (voice && voice !== SYSTEM_DEFAULT_VOICE) args.push('-v', voice);
+    const args = ['-r', String(toWordsPerMinute(rate))];
+    if (isNamedVoice(voice)) args.push('-v', voice);
     args.push(text);
 
     const child = spawn(SAY_BIN, args);
@@ -170,4 +153,7 @@ process.on('SIGINT', () => {
   server.close(() => process.exit(0));
 });
 
-export { parseVoiceList, SYSTEM_DEFAULT_VOICE };
+// Re-exported from their canonical home in src/core/say-voices.js, which the offline file
+// renderer shares. Note parseVoiceList() no longer prepends the system default — toVoiceCatalog()
+// does that, and it is what the /voices endpoint returns.
+export { parseVoiceList, SYSTEM_DEFAULT_VOICE, toVoiceCatalog };

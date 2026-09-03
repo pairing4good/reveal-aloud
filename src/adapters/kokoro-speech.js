@@ -15,25 +15,11 @@
  * whole of the public API this file depends on — see https://www.npmjs.com/package/kokoro-js.
  */
 
+import { KOKORO_VOICES, kokoroVoice } from '../core/kokoro-voices.js';
 import { pickVoice } from '../core/voice.js';
 
 const DEFAULT_MODULE_URL = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm';
 const DEFAULT_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-
-/**
- * The English voices this model ships with, so `listVoices()` has something to show before the
- * ~90MB model has been fetched. Once loaded, the model's own `list_voices()` is used instead —
- * this table only ever covers the gap before that, and is not consulted again afterward.
- */
-const KNOWN_VOICES = [
-  ['af_heart', 'en-US'], ['af_bella', 'en-US'], ['af_nicole', 'en-US'], ['af_aoede', 'en-US'],
-  ['af_kore', 'en-US'], ['af_sarah', 'en-US'], ['af_nova', 'en-US'], ['af_sky', 'en-US'],
-  ['af_alloy', 'en-US'], ['af_jessica', 'en-US'], ['af_river', 'en-US'],
-  ['am_adam', 'en-US'], ['am_echo', 'en-US'], ['am_eric', 'en-US'], ['am_fenrir', 'en-US'],
-  ['am_liam', 'en-US'], ['am_michael', 'en-US'], ['am_onyx', 'en-US'], ['am_puck', 'en-US'],
-  ['bf_alice', 'en-GB'], ['bf_emma', 'en-GB'], ['bf_isabella', 'en-GB'], ['bf_lily', 'en-GB'],
-  ['bm_daniel', 'en-GB'], ['bm_fable', 'en-GB'], ['bm_george', 'en-GB'], ['bm_lewis', 'en-GB']
-].map(([name, lang]) => ({ name, lang, default: name === 'af_heart' }));
 
 /**
  * @param {object} [options]
@@ -87,12 +73,10 @@ export function createKokoroSpeech(options = {}) {
         })
       )
       .then((tts) => {
-        if (typeof tts.list_voices === 'function') {
-          const names = tts.list_voices();
-          if (Array.isArray(names) && names.length > 0) {
-            liveVoices = names.map((name) => voiceMetaFor(name));
-          }
-        }
+        // Deliberately NOT `tts.list_voices()` — that method console.tables the roster and
+        // returns undefined. The `voices` getter is the data, keyed by voice id.
+        const ids = tts?.voices ? Object.keys(tts.voices) : [];
+        if (ids.length > 0) liveVoices = ids.map((name) => voiceMetaFor(name, tts.voices[name]));
         return tts;
       });
     return modelPromise;
@@ -185,7 +169,7 @@ export function createKokoroSpeech(options = {}) {
   }
 
   function listVoices() {
-    return liveVoices ?? KNOWN_VOICES;
+    return liveVoices ?? KOKORO_VOICES;
   }
 
   function resolveVoice(settings = {}) {
@@ -208,15 +192,26 @@ export function createKokoroSpeech(options = {}) {
   };
 }
 
-function voiceMetaFor(name) {
-  const known = KNOWN_VOICES.find((v) => v.name === name);
+/**
+ * Merges what the loaded model reports about a voice with our own graded roster. The roster wins
+ * on language, since it is normalized to BCP 47 while kokoro-js reports `en-us`.
+ *
+ * @param {string} name voice id
+ * @param {{language?: string, gender?: string, targetQuality?: string, overallGrade?: string,
+ *   traits?: string}} [meta] the model's own entry, when it has one
+ */
+function voiceMetaFor(name, meta) {
+  const known = kokoroVoice(name);
   if (known) return known;
-  // An unrecognised id from a future model version: guess the language from Kokoro's own
-  // `{language}{gender}_{name}` convention (e.g. `jf_alpha` is Japanese) rather than drop it.
-  const lang = { a: 'en-US', b: 'en-GB', j: 'ja-JP', z: 'zh-CN', e: 'es-ES', f: 'fr-FR', h: 'hi-IN', i: 'it-IT', p: 'pt-BR' }[
-    name[0]
-  ];
-  return { name, lang };
+
+  // An id from a future model revision that our roster does not list yet. Guess the language
+  // from Kokoro's own `{language}{gender}_{name}` convention (`jf_alpha` is Japanese) rather
+  // than drop the voice.
+  const lang =
+    { a: 'en-US', b: 'en-GB', j: 'ja-JP', z: 'zh-CN', e: 'es-ES', f: 'fr-FR', h: 'hi-IN', i: 'it-IT', p: 'pt-BR' }[
+      name[0]
+    ] ?? meta?.language;
+  return { name, lang, gender: meta?.gender, overallGrade: meta?.overallGrade };
 }
 
 function describeError(error, fallback) {

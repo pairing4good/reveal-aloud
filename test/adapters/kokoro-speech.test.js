@@ -17,7 +17,14 @@ function fakeModel() {
   const pending = [];
   return {
     generateCalls: [],
-    list_voices: () => ['af_heart', 'am_adam'],
+    // Mirrors the real kokoro-js API: `voices` is the data, keyed by voice id, and
+    // `list_voices()` console.tables it and returns undefined. Anything reading the return
+    // value of list_voices() gets nothing — which is exactly the bug this shape guards.
+    voices: {
+      af_heart: { name: 'Heart', language: 'en-us', gender: 'Female', overallGrade: 'A' },
+      am_adam: { name: 'Adam', language: 'en-us', gender: 'Male', overallGrade: 'F+' }
+    },
+    list_voices() {},
     generate(text, options) {
       this.generateCalls.push({ text, voice: options?.voice });
       let resolveIt;

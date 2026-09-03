@@ -48,4 +48,81 @@
  * @property {() => void} destroy
  */
 
+/* -------------------------------------------------------------------------------------------
+ * Offline export (bin/export-narration.js).
+ *
+ * These are only used by the exporter, never by the browser plugin — nothing here is reachable
+ * from src/index.js, so none of it ships in dist/.
+ * ---------------------------------------------------------------------------------------- */
+
+/**
+ * @typedef {object} NarrationSourcePort
+ * @property {(target: string) => Promise<{config: object, slides: SlideNarration[]}>} readDeck
+ *   Reads every slide's narration out of a deck, in presentation order. `config` is the deck's
+ *   own `aloud` block, so the exporter honours the same settings the deck speaks with.
+ * @property {() => Promise<void>} [close] releases a browser or server the source opened
+ */
+
+/**
+ * One slide's worth of narration, exactly as the live plugin would speak it.
+ *
+ * @typedef {object} SlideNarration
+ * @property {number} index position among all leaf slides, 0-based
+ * @property {number} h horizontal reveal.js index
+ * @property {number} v vertical reveal.js index
+ * @property {string|null} id the slide's `id` attribute, when it has one
+ * @property {string|null} title first heading, for the manifest and CSV
+ * @property {boolean} hasNotes whether the slide had speaker notes at all — distinct from
+ *   whether anything survived bracket stripping
+ * @property {string[]} chunks what will actually be spoken, already stripped and chunked
+ * @property {boolean} unclosedBracket a `[` was never closed, so more was silenced than meant
+ */
+
+/**
+ * Renders narration to an audio file. The seam that lets `say` and Kokoro coexist: the two
+ * combine chunks quite differently, so the port takes chunks rather than joined text.
+ *
+ * @typedef {object} AudioRenderPort
+ * @property {string} id `'say'` or `'kokoro'`
+ * @property {() => Promise<void>} probe
+ *   Rejects with a message a human can act on when this renderer cannot run here — wrong
+ *   platform, missing package, unsupported Node. Called once before any rendering.
+ * @property {() => Promise<Array<{name: string, lang?: string, gender?: string,
+ *   grade?: string, traits?: string, default?: boolean}>>} listVoices
+ * @property {(job: RenderJob) => Promise<AudioFormat>} render
+ *   Writes `job.outPath` and returns the format written, so the caller can refuse to
+ *   concatenate files that do not match.
+ */
+
+/**
+ * @typedef {object} RenderJob
+ * @property {string[]} chunks non-empty; callers skip silent slides rather than passing []
+ * @property {string} [voice]
+ * @property {number} rate
+ * @property {string} outPath
+ * @property {number} [gapSilenceMs] silence between chunks
+ * @property {number} [leadSilenceMs]
+ * @property {number} [tailSilenceMs]
+ */
+
+/**
+ * @typedef {object} AudioFormat
+ * @property {number} sampleRate
+ * @property {number} channels
+ * @property {number} bitsPerSample
+ */
+
+/**
+ * The filesystem, injected so the whole export flow is testable in memory.
+ *
+ * @typedef {object} FilesPort
+ * @property {(dir: string) => Promise<void>} mkdir
+ * @property {(path: string, data: string|Uint8Array) => Promise<void>} write
+ * @property {(path: string, bytes?: number) => Promise<Uint8Array>} readHead
+ *   The first `bytes` of a file — enough to parse a WAV header without loading the samples.
+ * @property {(path: string) => Promise<number>} size
+ * @property {(path: string, from: number, to: number) => Promise<Uint8Array>} readRange
+ * @property {(path: string) => Promise<boolean>} exists
+ */
+
 export {};

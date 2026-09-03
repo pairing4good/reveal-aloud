@@ -23,6 +23,7 @@
     "build": "node build.js",
     "build:site": "npm run build && node scripts/build-site.js",
     "demo": "npm run build && node scripts/serve.js",
+    "export": "node bin/export-narration.js",
     "lint": "eslint src test demo bin build.js scripts",
     "say-server": "node bin/say-server.js",
     "test": "vitest run",
@@ -55,11 +56,13 @@
     "fast-check": "^3.22.0",
     "globals": "^15.11.0",
     "jsdom": "^25.0.1",
+    "kokoro-js": "^1.2.1",
     "playwright": "^1.48.0",
     "reveal.js": "^5.2.1",
     "vitest": "^4.1.11"
   },
   "bin": {
-    "reveal-aloud-say-server": "bin/say-server.js"
+    "reveal-aloud-say-server": "bin/say-server.js",
+    "reveal-aloud-export": "bin/export-narration.js"
   }
 }

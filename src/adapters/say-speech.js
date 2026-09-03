@@ -9,6 +9,7 @@
  * everywhere `fetch` does.
  */
 
+import { joinForSay } from '../core/say-format.js';
 import { pickVoice } from '../core/voice.js';
 
 const DEFAULT_SERVER_URL = 'http://127.0.0.1:5757';
@@ -82,19 +83,11 @@ export function createSaySpeech(options = {}) {
     const { voice } = resolveVoice(settings);
     const voiceName = voice ? voice.name : '';
 
-    // Join all chunks into one utterance, padded at both ends. [[slnc N]] is a native macOS say
-    // embedded command for N ms of silence. Speaking everything in a single subprocess removes
-    // the per-sentence device init/teardown, and the padding covers the one remaining open and
-    // close (see the DEFAULT_*_SILENCE_MS notes above).
-    //
-    // Injecting the markers here rather than in core is deliberate: stripSilent() has already
-    // removed every bracket from the notes — a property test asserts core output can never
-    // contain `[` or `]` — so these are the only embedded commands `say` will ever see, and no
-    // escaping of the chunk text is needed. Moving this upstream would break that invariant.
-    const joined =
-      `[[slnc ${leadSilenceMs}]] ` +
-      chunks.join(` [[slnc ${gapSilenceMs}]] `) +
-      ` [[slnc ${tailSilenceMs}]]`;
+    // One utterance, padded at both ends. Speaking everything in a single subprocess removes the
+    // per-sentence device init/teardown, and the padding covers the one remaining open and close
+    // (see the DEFAULT_*_SILENCE_MS notes above). joinForSay() is shared with the server and the
+    // offline file renderer so all three agree on exactly what `say` receives.
+    const joined = joinForSay(chunks, { leadSilenceMs, gapSilenceMs, tailSilenceMs });
 
     abortController = new AbortController();
     let response;
