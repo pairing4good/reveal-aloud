@@ -26,7 +26,7 @@ side-by-side comparison, how to switch, and what setup each one needs.
 Two lines:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.0/dist/reveal-aloud.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.1/dist/reveal-aloud.js"></script>
 
 <script>
   Reveal.initialize({
@@ -35,12 +35,12 @@ Two lines:
 </script>
 ```
 
-jsDelivr serves that straight from this repository's `v0.1.0` tag, so there is nothing to
+jsDelivr serves that straight from this repository's `v0.1.1` tag, so there is nothing to
 install and nothing to sign up for.
 
 **Keep the version pinned.** jsDelivr caches a file effectively forever once it has served it,
 and an unpinned URL follows the latest release — so a deck you handed to someone months ago
-could quietly start loading different code. `@v0.1.0` is the version you tested against; say so.
+could quietly start loading different code. `@v0.1.1` is the version you tested against; say so.
 
 <details>
 <summary>From npm (once published)</summary>
@@ -50,7 +50,7 @@ The package is not on npm yet. After the first `npm publish` — see
 
 ```html
 <!-- jsDelivr mirrors npm automatically; no separate CDN step -->
-<script src="https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.0/dist/reveal-aloud.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.1/dist/reveal-aloud.js"></script>
 ```
 
 ```bash
@@ -401,7 +401,7 @@ and pushes both, which makes two things happen:
 directly, and `dist/` is committed, so the tag alone is enough:
 
 ```
-https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.0/dist/reveal-aloud.js
+https://cdn.jsdelivr.net/gh/pairing4good/reveal-aloud@v0.1.1/dist/reveal-aloud.js
 ```
 
 **The tag triggers `release.yml`**, which re-runs lint, build, the dist-drift check, the unit
@@ -409,7 +409,7 @@ suite and the end-to-end suite, refuses to continue if the tag and `package.json
 disagree, then runs `npm publish --provenance`. Once that succeeds the npm CDN path works too:
 
 ```
-https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.0/dist/reveal-aloud.js
+https://cdn.jsdelivr.net/npm/reveal-aloud@0.1.1/dist/reveal-aloud.js
 ```
 
 Nothing is ever published *to* jsDelivr — it mirrors npm and GitHub on demand, with no account
