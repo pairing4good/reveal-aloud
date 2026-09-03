@@ -1,4 +1,4 @@
-/*! reveal-aloud 0.1.0 | MIT | https://github.com/pairing4good/reveal-aloud#readme */
+/*! reveal-aloud 0.1.1 | MIT | https://github.com/pairing4good/reveal-aloud#readme */
 var RevealAloud = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;

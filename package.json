@@ -1,6 +1,6 @@
 {
   "name": "reveal-aloud",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read your reveal.js speaker notes aloud. Press R. Text in [brackets] stays silent.",
   "type": "module",
   "main": "dist/reveal-aloud.js",
