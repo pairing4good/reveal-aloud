@@ -62,6 +62,7 @@ const CSS = `
   .reveal-aloud-indicator { transition: none; }
 }
 @media print { .reveal-aloud-indicator { display: none !important; } }
+.reveal-aloud-indicator[data-fullscreen="true"] { opacity: 0 !important; }
 
 .reveal-aloud-warning {
   position: fixed;
@@ -122,6 +123,12 @@ export function createDomIndicator(options = {}) {
     '<span class="reveal-aloud-indicator__pulse"></span>' +
     '<span class="reveal-aloud-indicator__text"></span>';
   doc.body.appendChild(el);
+
+  const onFullscreenChange = () => {
+    el.dataset.fullscreen = doc.fullscreenElement || doc.webkitFullscreenElement ? 'true' : 'false';
+  };
+  doc.addEventListener('fullscreenchange', onFullscreenChange);
+  doc.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
   let hideTimer = null;
   let warningEl = null;

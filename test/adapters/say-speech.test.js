@@ -63,21 +63,59 @@ function fakeFetch({ voices = [{ name: 'system-default', lang: '', default: true
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('speaking a slide', () => {
-  it('sends chunks to /speak in order, one at a time', async () => {
+  it('joins all chunks into a single /speak request separated by [[slnc]] silences', async () => {
     const server = fakeFetch();
     const speech = createSaySpeech({ fetchImpl: server.fetchImpl });
     const handlers = { onFinished: vi.fn(), onFailed: vi.fn() };
 
     const done = speech.speak({ chunks: ['One.', 'Two.'], epoch: 1, settings: {} }, handlers);
     await flush();
-    expect(server.speakCalls.map((c) => c.text)).toEqual(['One.']);
 
-    server.resolveNext();
-    await flush();
-    expect(server.speakCalls.map((c) => c.text)).toEqual(['One.', 'Two.']);
+    expect(server.speakCalls).toHaveLength(1);
+    expect(server.speakCalls[0].text).toBe('[[slnc 700]] One. [[slnc 300]] Two. [[slnc 700]]');
 
     server.resolveNext();
     await done;
+    expect(handlers.onFinished).toHaveBeenCalledWith(1);
+    expect(handlers.onFailed).not.toHaveBeenCalled();
+  });
+
+  it('pads both ends even for a single chunk, so the first and last word are not clipped', async () => {
+    const server = fakeFetch();
+    const speech = createSaySpeech({ fetchImpl: server.fetchImpl });
+
+    speech.speak({ chunks: ['Alone.'], epoch: 1, settings: {} }, { onFinished() {}, onFailed() {} });
+    await flush();
+
+    expect(server.speakCalls[0].text).toBe('[[slnc 700]] Alone. [[slnc 700]]');
+  });
+
+  it('honours configured silence durations', async () => {
+    const server = fakeFetch();
+    const speech = createSaySpeech({
+      fetchImpl: server.fetchImpl,
+      leadSilenceMs: 1000,
+      tailSilenceMs: 900,
+      gapSilenceMs: 200
+    });
+
+    speech.speak(
+      { chunks: ['One.', 'Two.'], epoch: 1, settings: {} },
+      { onFinished() {}, onFailed() {} }
+    );
+    await flush();
+
+    expect(server.speakCalls[0].text).toBe('[[slnc 1000]] One. [[slnc 200]] Two. [[slnc 900]]');
+  });
+
+  it('finishes without spawning a say process when there is nothing to speak', async () => {
+    const server = fakeFetch();
+    const speech = createSaySpeech({ fetchImpl: server.fetchImpl });
+    const handlers = { onFinished: vi.fn(), onFailed: vi.fn() };
+
+    await speech.speak({ chunks: [], epoch: 1, settings: {} }, handlers);
+
+    expect(server.speakCalls).toHaveLength(0);
     expect(handlers.onFinished).toHaveBeenCalledWith(1);
     expect(handlers.onFailed).not.toHaveBeenCalled();
   });
@@ -98,7 +136,8 @@ describe('speaking a slide', () => {
     );
     await flush();
 
-    expect(server.speakCalls[0]).toEqual({ text: 'Hi.', voice: 'Ava (Premium)', rate: 1.4 });
+    expect(server.speakCalls[0]).toMatchObject({ voice: 'Ava (Premium)', rate: 1.4 });
+    expect(server.speakCalls[0].text).toContain('Hi.');
   });
 
   it('sends "system-default" as the voice when nothing is configured, reaching a Siri voice', async () => {
@@ -129,7 +168,7 @@ describe('being interrupted', () => {
     expect(server.stopCalls).toHaveLength(1);
   });
 
-  it('never sends the rest of a queue that was stopped', async () => {
+  it('sends all chunks as one joined request and stop() aborts it without extra speak calls', async () => {
     const server = fakeFetch();
     const speech = createSaySpeech({ fetchImpl: server.fetchImpl });
 
@@ -139,10 +178,17 @@ describe('being interrupted', () => {
     );
     await flush();
 
+    // All chunks were joined into the single in-flight request.
+    expect(server.speakCalls).toHaveLength(1);
+    expect(server.speakCalls[0].text).toBe(
+      '[[slnc 700]] One. [[slnc 300]] Two. [[slnc 300]] Three. [[slnc 700]]'
+    );
+
     speech.stop();
     await flush();
 
-    expect(server.speakCalls.map((c) => c.text)).toEqual(['One.']);
+    // stop() must not trigger any additional speak calls.
+    expect(server.speakCalls).toHaveLength(1);
   });
 
   it('does not report failure or completion for a request cancelled by our own stop()', async () => {
@@ -181,7 +227,9 @@ describe('being interrupted', () => {
     server.resolveNext(); // "New."
     await flush();
 
-    expect(server.speakCalls.map((c) => c.text)).toEqual(['Old.', 'New.']);
+    expect(server.speakCalls).toHaveLength(2);
+    expect(server.speakCalls[0].text).toContain('Old.');
+    expect(server.speakCalls[1].text).toContain('New.');
   });
 });
 
@@ -203,7 +251,9 @@ describe('a response that survives an abort — a real Fetch spec edge case', ()
 
     expect(handlers.onFinished).not.toHaveBeenCalled();
     expect(handlers.onFailed).not.toHaveBeenCalled();
-    expect(server.speakCalls.map((c) => c.text)).toEqual(['One.']); // "Two." was never sent
+    // All chunks were joined into one request; "Two." is not a separate call.
+    expect(server.speakCalls).toHaveLength(1);
+    expect(server.speakCalls[0].text).toBe('[[slnc 700]] One. [[slnc 300]] Two. [[slnc 700]]');
   });
 
   it('does not report a stale failure — or disturb the slide that replaced it — when a ' +

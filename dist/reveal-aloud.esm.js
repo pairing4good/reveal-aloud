@@ -605,8 +605,17 @@ function isKokoroSupported(scope = globalThis) {
 
 // src/adapters/say-speech.js
 var DEFAULT_SERVER_URL = "http://127.0.0.1:5757";
+var DEFAULT_LEAD_SILENCE_MS = 700;
+var DEFAULT_TAIL_SILENCE_MS = 700;
+var DEFAULT_GAP_SILENCE_MS = 300;
 function createSaySpeech(options = {}) {
-  const { serverUrl = DEFAULT_SERVER_URL, fetchImpl = fetch } = options;
+  const {
+    serverUrl = DEFAULT_SERVER_URL,
+    fetchImpl = fetch,
+    leadSilenceMs = DEFAULT_LEAD_SILENCE_MS,
+    tailSilenceMs = DEFAULT_TAIL_SILENCE_MS,
+    gapSilenceMs = DEFAULT_GAP_SILENCE_MS
+  } = options;
   let liveVoices = null;
   const voicesListeners = /* @__PURE__ */ new Set();
   fetchImpl(`${serverUrl}/voices`).then((res) => res.ok ? res.json() : null).then((voices) => {
@@ -620,32 +629,35 @@ function createSaySpeech(options = {}) {
   async function speak(request, handlers) {
     const { chunks, epoch, settings = {} } = request;
     liveEpoch = epoch;
+    if (chunks.length === 0) {
+      liveEpoch = null;
+      handlers.onFinished(epoch);
+      return;
+    }
     const { voice } = resolveVoice(settings);
     const voiceName = voice ? voice.name : "";
-    for (const text of chunks) {
+    const joined = `[[slnc ${leadSilenceMs}]] ` + chunks.join(` [[slnc ${gapSilenceMs}]] `) + ` [[slnc ${tailSilenceMs}]]`;
+    abortController = new AbortController();
+    let response;
+    try {
+      response = await fetchImpl(`${serverUrl}/speak`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: joined, voice: voiceName, rate: settings.rate }),
+        signal: abortController.signal
+      });
+    } catch (error) {
+      if ((error == null ? void 0 : error.name) === "AbortError") return;
       if (liveEpoch !== epoch) return;
-      abortController = new AbortController();
-      let response;
-      try {
-        response = await fetchImpl(`${serverUrl}/speak`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text, voice: voiceName, rate: settings.rate }),
-          signal: abortController.signal
-        });
-      } catch (error) {
-        if ((error == null ? void 0 : error.name) === "AbortError") return;
-        if (liveEpoch !== epoch) return;
-        liveEpoch = null;
-        handlers.onFailed(epoch, unreachableMessage(serverUrl));
-        return;
-      }
-      if (liveEpoch !== epoch) return;
-      if (!response.ok) {
-        liveEpoch = null;
-        handlers.onFailed(epoch, await describeFailure(response));
-        return;
-      }
+      liveEpoch = null;
+      handlers.onFailed(epoch, unreachableMessage(serverUrl));
+      return;
+    }
+    if (liveEpoch !== epoch) return;
+    if (!response.ok) {
+      liveEpoch = null;
+      handlers.onFailed(epoch, await describeFailure(response));
+      return;
     }
     if (liveEpoch === epoch) {
       liveEpoch = null;
@@ -889,6 +901,7 @@ var CSS = `
   .reveal-aloud-indicator { transition: none; }
 }
 @media print { .reveal-aloud-indicator { display: none !important; } }
+.reveal-aloud-indicator[data-fullscreen="true"] { opacity: 0 !important; }
 
 .reveal-aloud-warning {
   position: fixed;
@@ -939,6 +952,11 @@ function createDomIndicator(options = {}) {
   el.setAttribute("aria-hidden", "true");
   el.innerHTML = '<span class="reveal-aloud-indicator__icon"></span><span class="reveal-aloud-indicator__pulse"></span><span class="reveal-aloud-indicator__text"></span>';
   doc.body.appendChild(el);
+  const onFullscreenChange = () => {
+    el.dataset.fullscreen = doc.fullscreenElement || doc.webkitFullscreenElement ? "true" : "false";
+  };
+  doc.addEventListener("fullscreenchange", onFullscreenChange);
+  doc.addEventListener("webkitfullscreenchange", onFullscreenChange);
   let hideTimer = null;
   let warningEl = null;
   let warningTimer = null;

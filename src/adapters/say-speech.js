@@ -14,13 +14,39 @@ import { pickVoice } from '../core/voice.js';
 const DEFAULT_SERVER_URL = 'http://127.0.0.1:5757';
 
 /**
+ * Silence padding, in milliseconds, for the `[[slnc N]]` embedded commands below.
+ *
+ * `say` hands samples to a CoreAudio output device that is idle when the process starts, and it
+ * exits as soon as the synthesiser is done — before the hardware buffer has drained. Left alone
+ * that clips the first and last word of every slide. Leading silence gives the device time to
+ * spin up before any speech, trailing silence keeps the process alive until the buffer flushes.
+ *
+ * Measured on macOS: the silence actually produced runs roughly 250ms shorter than the value
+ * requested (and bottoms out around 250ms), so these are sized to buy ~450ms at each end. It is
+ * rate-independent — the server's `-r` flag does not scale it.
+ */
+const DEFAULT_LEAD_SILENCE_MS = 700;
+const DEFAULT_TAIL_SILENCE_MS = 700;
+const DEFAULT_GAP_SILENCE_MS = 300;
+
+/**
  * @param {object} [options]
  * @param {string} [options.serverUrl] where `bin/say-server.js` is listening
  * @param {typeof fetch} [options.fetchImpl] injectable for tests
+ * @param {number} [options.leadSilenceMs] silence before the first word; raise it if a slow
+ *   output device (Bluetooth especially) still clips the opening word
+ * @param {number} [options.tailSilenceMs] silence after the last word
+ * @param {number} [options.gapSilenceMs] silence between chunks
  * @returns {import('../ports.js').SpeechPort}
  */
 export function createSaySpeech(options = {}) {
-  const { serverUrl = DEFAULT_SERVER_URL, fetchImpl = fetch } = options;
+  const {
+    serverUrl = DEFAULT_SERVER_URL,
+    fetchImpl = fetch,
+    leadSilenceMs = DEFAULT_LEAD_SILENCE_MS,
+    tailSilenceMs = DEFAULT_TAIL_SILENCE_MS,
+    gapSilenceMs = DEFAULT_GAP_SILENCE_MS
+  } = options;
 
   // The server's own known-good voices are fetched once and kept for the life of the plugin —
   // the server queries `say -v ?` itself, so there is nothing to poll for on this side beyond
@@ -46,36 +72,53 @@ export function createSaySpeech(options = {}) {
     const { chunks, epoch, settings = {} } = request;
     liveEpoch = epoch;
 
+    if (chunks.length === 0) {
+      // Nothing to say — padding alone would spawn a process just to play silence.
+      liveEpoch = null;
+      handlers.onFinished(epoch);
+      return;
+    }
+
     const { voice } = resolveVoice(settings);
     const voiceName = voice ? voice.name : '';
 
-    for (const text of chunks) {
+    // Join all chunks into one utterance, padded at both ends. [[slnc N]] is a native macOS say
+    // embedded command for N ms of silence. Speaking everything in a single subprocess removes
+    // the per-sentence device init/teardown, and the padding covers the one remaining open and
+    // close (see the DEFAULT_*_SILENCE_MS notes above).
+    //
+    // Injecting the markers here rather than in core is deliberate: stripSilent() has already
+    // removed every bracket from the notes — a property test asserts core output can never
+    // contain `[` or `]` — so these are the only embedded commands `say` will ever see, and no
+    // escaping of the chunk text is needed. Moving this upstream would break that invariant.
+    const joined =
+      `[[slnc ${leadSilenceMs}]] ` +
+      chunks.join(` [[slnc ${gapSilenceMs}]] `) +
+      ` [[slnc ${tailSilenceMs}]]`;
+
+    abortController = new AbortController();
+    let response;
+    try {
+      response = await fetchImpl(`${serverUrl}/speak`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: joined, voice: voiceName, rate: settings.rate }),
+        signal: abortController.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') return; // stop() during this request — expected
       if (liveEpoch !== epoch) return;
+      liveEpoch = null;
+      handlers.onFailed(epoch, unreachableMessage(serverUrl));
+      return;
+    }
 
-      abortController = new AbortController();
-      let response;
-      try {
-        response = await fetchImpl(`${serverUrl}/speak`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text, voice: voiceName, rate: settings.rate }),
-          signal: abortController.signal
-        });
-      } catch (error) {
-        if (error?.name === 'AbortError') return; // stop() during this request — expected
-        if (liveEpoch !== epoch) return;
-        liveEpoch = null;
-        handlers.onFailed(epoch, unreachableMessage(serverUrl));
-        return;
-      }
+    if (liveEpoch !== epoch) return; // stop() arrived while the response was in flight
 
-      if (liveEpoch !== epoch) return; // stop() arrived while the response was in flight
-
-      if (!response.ok) {
-        liveEpoch = null;
-        handlers.onFailed(epoch, await describeFailure(response));
-        return;
-      }
+    if (!response.ok) {
+      liveEpoch = null;
+      handlers.onFailed(epoch, await describeFailure(response));
+      return;
     }
 
     if (liveEpoch === epoch) {
