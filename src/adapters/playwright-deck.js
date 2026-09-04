@@ -73,12 +73,7 @@ export function createPlaywrightSource(options = {}) {
           timeout: timeoutMs
         });
       } catch {
-        const detail = consoleErrors.length ? `\nThe page reported: ${consoleErrors[0]}` : '';
-        throw new Error(
-          `reveal.js never became ready at ${url}.\n` +
-            'Is this a reveal.js deck? Use --timeout to wait longer if it loads slowly.' +
-            detail
-        );
+        throw new Error(await diagnoseNotReady(page, url, consoleErrors));
       }
 
       // A deck that imported the ESM build never set the global, so give it one to call.
@@ -139,6 +134,54 @@ export function createPlaywrightSource(options = {}) {
   }
 
   return { readDeck, close };
+}
+
+/**
+ * Explains *why* reveal.js never reported ready.
+ *
+ * Worth the extra round trip: "use --timeout to wait longer" is actively misleading when the
+ * page is not a deck at all, and sends people tuning a flag that can never help. The three
+ * cases below fail for completely different reasons and deserve different advice.
+ */
+async function diagnoseNotReady(page, url, consoleErrors) {
+  const seen = await page.evaluate(() => ({
+    hasReveal: typeof window.Reveal !== 'undefined',
+    hasContainer: Boolean(document.querySelector('.reveal')),
+    sections: document.querySelectorAll('section').length,
+    title: document.title
+  }));
+
+  const reported = consoleErrors.length ? `\n\nThe page reported: ${consoleErrors[0]}` : '';
+
+  // Not a deck at all. Say so plainly rather than blaming the clock.
+  if (!seen.hasReveal && !seen.hasContainer && seen.sections === 0) {
+    return (
+      `${url} does not look like a reveal.js presentation` +
+      (seen.title ? ` ("${seen.title}")` : '') +
+      '.\nIt has no reveal.js, no .reveal container and no <section> slides, so there are no\n' +
+      'speaker notes to export. Check you pointed at the deck itself — a repo often has a\n' +
+      'similarly named write-up next to the real deck.' +
+      reported
+    );
+  }
+
+  // Looks like a deck, but the library never loaded — usually a missing or blocked script.
+  if (!seen.hasReveal) {
+    return (
+      `${url} looks like a deck (${seen.sections} <section> elements) but reveal.js never\n` +
+      'loaded, so window.Reveal is undefined. Check the deck\'s <script> tags resolve — a\n' +
+      'vendored copy under a path that does not exist, or a CDN blocked offline, does this.' +
+      reported
+    );
+  }
+
+  // reveal.js is present but initialize() never completed or was never called.
+  return (
+    `reveal.js loaded at ${url} but never finished initialising, so no slides could be read.\n` +
+    'Check that Reveal.initialize() is actually called. If the deck is simply slow, raise\n' +
+    '--timeout.' +
+    reported
+  );
 }
 
 /**

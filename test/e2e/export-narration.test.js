@@ -175,6 +175,48 @@ describe.runIf(await browserAvailable())('exporting the demo deck', () => {
   });
 });
 
+describe('explaining a deck it cannot read', () => {
+  const fixture = (name) =>
+    fileURLToPath(new URL(`../fixtures/decks/${name}`, import.meta.url));
+
+  // Every one of these fails the same readiness check, and every one needs different advice.
+  // Getting this wrong costs real time: "raise --timeout" on a file that is not a deck at all
+  // sends you tuning a flag that can never help.
+
+  it('says plainly when the page is not a presentation', async () => {
+    const { code, stderr } = await runCli([fixture('not-a-deck.html'), '--timeout', '3000']);
+
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/does not look like a reveal\.js presentation/);
+    expect(stderr).toContain('A Written Specification'); // names it, so you know what you hit
+    expect(stderr).toMatch(/pointed at the deck itself/);
+    expect(stderr).not.toMatch(/--timeout/); // the one suggestion that cannot help here
+  }, 60000);
+
+  it('points at the scripts when the page is a deck but reveal.js never loaded', async () => {
+    const { code, stderr } = await runCli([fixture('reveal-missing.html'), '--timeout', '3000']);
+
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/looks like a deck \(2 <section> elements\)/);
+    expect(stderr).toMatch(/<script> tags resolve/);
+  }, 60000);
+
+  it('points at initialize\u2019s absence when reveal.js loaded but never started', async () => {
+    const { code, stderr } = await runCli([fixture('never-initialised.html'), '--timeout', '3000']);
+
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/never finished initialising/);
+    expect(stderr).toMatch(/Reveal\.initialize\(\) is actually called/);
+    expect(stderr).toMatch(/--timeout/); // here it genuinely might be slowness
+  }, 60000);
+
+  it('names a path that does not exist without launching a browser', async () => {
+    const { code, stderr } = await runCli(['definitely-not-here.html']);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/No such deck/);
+  });
+});
+
 describe('the CLI on its own', () => {
   it('refuses webspeech, naming the engines that do work', async () => {
     const { code, stderr } = await runCli(['deck.html', '--engine', 'webspeech']);

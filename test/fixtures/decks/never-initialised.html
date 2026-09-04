@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<!-- reveal.js is present but Reveal.initialize() is never called, so it never reports ready. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" /><title>Forgot To Initialise</title>
+    <script>
+      window.Reveal = { isReady: () => false };
+    </script>
+  </head>
+  <body>
+    <div class="reveal"><div class="slides"><section>One</section></div></div>
+  </body>
+</html>
